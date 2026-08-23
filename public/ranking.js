@@ -27,7 +27,7 @@ const canchas = {
   datos: null,
   error: null,
   alta: false,
-  nuevo: { nombre: '', tipo: 'copa', fecha: hoy(), hora: '11:00', cancha: 1, jugadores: '' },
+  nuevo: { nombre: '', tipo: 'copa', fecha: hoy(), hora: '11:00', cancha: 1, chukkers: 6 },
 };
 
 /** Cuando se carga un resultado, lo que está en pantalla queda viejo. */
@@ -187,9 +187,32 @@ function dibujarFicha(raiz, datos, volver) {
     ? conHcp.reduce((a, p) => a + p.hcpPractica, 0) / conHcp.length
     : null;
 
+  // Qué porcentaje de los partidos que jugó terminó ganando. Sale de los
+  // enfrentamientos donde estuvo, que es lo mismo que reparte los puntos.
+  let jugados = 0;
+  let ganados = 0;
+  jugadas.forEach((p) => {
+    p.partidos.forEach((x) => {
+      if (x.golesA === null || x.golesA === undefined) return;
+      const mio = p.miEquipo === 'bicolor'
+        ? 'ambos'
+        : (x.equipoA === p.miEquipo ? 'a' : x.equipoB === p.miEquipo ? 'b' : null);
+      if (!mio) return;            // su equipo descansaba esa franja
+      jugados++;
+      if (mio === 'a' && x.golesA > x.golesB) ganados++;
+      if (mio === 'b' && x.golesB > x.golesA) ganados++;
+      // El bicolor juega para los dos: siempre hay un lado que gana.
+      if (mio === 'ambos' && x.golesA !== x.golesB) ganados += 0.5;
+    });
+  });
+  const porcentaje = jugados ? Math.round(ganados / jugados * 100) : null;
+
   raiz.appendChild(el('div', { class: 'card p numeros' }, [
     el('div', {}, [el('b', { class: 'teal' }, [String(resumen.practicas)]), el('span', {}, ['prácticas'])]),
-    el('div', {}, [el('b', {}, [puntos(resumen.puntos)]), el('span', {}, ['puntos'])]),
+    el('div', {}, [
+      el('b', {}, [puntos(resumen.puntos)]),
+      el('span', {}, [porcentaje === null ? 'puntos' : 'puntos · ' + porcentaje + '% ganados']),
+    ]),
     el('div', {}, [el('b', { class: 'oro' }, [String(resumen.mvps)]), el('span', {}, ['MVP'])]),
   ]));
   raiz.appendChild(el('div', { class: 'card p numeros', style: 'margin-top:8px' }, [
@@ -214,32 +237,24 @@ function dibujarFicha(raiz, datos, volver) {
     });
   });
 
-  const masDe = (cuenta) => Object.entries(cuenta).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
-  const companero = masDe(conmigo);
-  const compartido = masDe(cruzado);
+  const losDiez = (cuenta) => Object.entries(cuenta)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 10);
 
-  if (companero || compartido) {
-    const caja = el('div', { class: 'card p', style: 'margin-top:14px' });
-    if (companero) {
-      caja.appendChild(el('div', { class: 'renglon-dato' }, [
-        el('span', { style: 'flex:1' }, [
-          el('em', {}, ['Compañero más frecuente']),
-          el('b', {}, [companero[0]]),
-        ]),
-        insignia(companero[1] + 'x', 'var(--teal)'),
-      ]));
-    }
-    if (compartido) {
-      caja.appendChild(el('div', { class: 'renglon-dato' }, [
-        el('span', { style: 'flex:1' }, [
-          el('em', {}, ['Con quien más compartió cancha']),
-          el('b', {}, [compartido[0]]),
-        ]),
-        insignia(compartido[1] + 'x', 'var(--gold)'),
-      ]));
-    }
-    raiz.appendChild(caja);
-  }
+  const tabla = (titulo, filas, color) => {
+    if (!filas.length) return null;
+    raiz.appendChild(el('h2', {}, [titulo]));
+    raiz.appendChild(el('div', { class: 'card p' }, filas.map(([apodo, veces], i) =>
+      el('div', { class: 'renglon-dato' }, [
+        el('span', { class: 'puesto-nro' + (i < 3 ? ' podio' : '') }, [String(i + 1)]),
+        el('b', { style: 'flex:1' }, [apodo]),
+        insignia(veces + (veces === 1 ? ' práctica' : ' prácticas'), color),
+      ]))));
+    return true;
+  };
+
+  tabla('Con quién jugó de compañero', losDiez(conmigo), 'var(--teal)');
+  tabla('Con quién compartió cancha', losDiez(cruzado), 'var(--gold)');
 
   /* ---- canchas */
   const suyas = {};
@@ -314,22 +329,29 @@ function vistaCanchas(raiz) {
     raiz.appendChild(el('div', { class: 'vacio' }, ['Todavía no se jugó en ninguna cancha.']));
   }
 
+  // Lo que mide una cancha es cuánto se jugó encima: los chukkers.
+  const totalChukkers = uso.reduce((a, c) => a + c.chukkers, 0);
+  const totalJornadas = uso.reduce((a, c) => a + c.total, 0);
+  if (uso.length) {
+    raiz.appendChild(el('div', { class: 'card p numeros' }, [
+      el('div', {}, [el('b', { class: 'teal' }, [String(totalChukkers)]), el('span', {}, ['chukkers en total'])]),
+      el('div', {}, [el('b', {}, [String(totalJornadas)]), el('span', {}, ['prácticas y partidos'])]),
+    ]));
+  }
+
   uso.forEach((c) => {
     raiz.appendChild(el('div', { class: 'card cancha-fila' }, [
       el('div', { class: 'redondel' }, [String(c.cancha)]),
       el('div', { style: 'flex:1;min-width:0' }, [
         el('b', {}, ['Cancha ' + c.cancha]),
         el('div', { class: 'insignias' }, [
-          c.practicas ? insignia(c.practicas + (c.practicas === 1 ? ' práctica' : ' prácticas'), '#3b82f6') : null,
+          c.practicas ? insignia(c.practicas + (c.practicas === 1 ? ' práctica' : ' prácticas'), 'var(--azul)') : null,
           c.partidos ? insignia(c.partidos + (c.partidos === 1 ? ' partido' : ' partidos'), 'var(--gold)') : null,
         ].filter(Boolean)),
       ]),
       el('div', { style: 'text-align:right' }, [
-        el('b', { class: 'grande' }, [String(c.total)]),
-        el('em', {}, ['total']),
-        c.promedio_jugadores
-          ? el('div', { class: 'chico' }, ['prom. ' + String(c.promedio_jugadores).replace('.', ',') + ' jug.'])
-          : null,
+        el('b', { class: 'grande' }, [String(c.chukkers)]),
+        el('em', {}, ['chukkers']),
       ]),
     ]));
   });
@@ -352,7 +374,7 @@ function vistaCanchas(raiz) {
         el('span', {}, [
           Hoja.fechaCorta(t.fecha) + ' · Cancha ' + t.cancha
           + (t.hora ? ' · ' + t.hora + ' hs' : '')
-          + (t.jugadores ? ' · ' + t.jugadores + ' jug.' : ''),
+          + ' · ' + t.chukkers + ' chukkers',
         ]),
       ]),
       insignia(t.tipo === 'aap' ? 'AAP' : 'COPA', t.tipo === 'aap' ? '#a855f7' : 'var(--gold)'),
@@ -404,22 +426,23 @@ function altaDeTorneoDelClub() {
         onchange: (e) => { nuevo.hora = e.target.value; },
       })),
     ]),
-    campo('Cancha', el('div', { class: 'chips' }, [1, 2, 3, 4, 5, 6].map((n) =>
+    campo('Cancha', el('div', { class: 'chips tres' }, [1, 2, 3, 4, 5, 6].map((n) =>
       el('button', {
         type: 'button', class: 'chip', 'aria-pressed': nuevo.cancha === n,
         onclick: () => { nuevo.cancha = n; render(); },
       }, [String(n)])))),
-    campo('Cuántos jugaron (opcional)', el('input', {
-      type: 'number', min: 0, max: 24, value: nuevo.jugadores,
-      oninput: (e) => { nuevo.jugadores = e.target.value; },
-    })),
+    campo('Chukkers', el('div', { class: 'chips tres' }, [4, 6, 8, 9, 10, 12].map((n) =>
+      el('button', {
+        type: 'button', class: 'chip', 'aria-pressed': nuevo.chukkers === n,
+        onclick: () => { nuevo.chukkers = n; render(); },
+      }, [String(n)])))),
     el('div', { class: 'acciones' }, [
       el('button', {
         class: 'primary', type: 'button',
         onclick: (e) => conBoton(e.target, async () => {
           await pedir('/api/canchas', { method: 'POST', body: JSON.stringify(nuevo) });
           canchas.alta = false;
-          canchas.nuevo = { nombre: '', tipo: 'copa', fecha: hoy(), hora: '11:00', cancha: 1, jugadores: '' };
+          canchas.nuevo = { nombre: '', tipo: 'copa', fecha: hoy(), hora: '11:00', cancha: 1, chukkers: 6 };
           await cargarCanchas();
         }, canchas),
       }, ['Guardar el partido']),

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0a0e1a">
+<meta name="theme-color" content="#ffffff">
 <title>San Diego Polo</title>
 <!-- Para que agregada a la pantalla de inicio quede como una app: con el
      escudo, a pantalla completa y sin la barra del navegador. -->
@@ -16,18 +16,19 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;700&display=swap">
 <style>
   :root {
-    --ground: #0a0e1a;
-    --surface: #111827;
-    --raised: #0d1b2e;
-    --line: #1e2d45;
-    --ink: #e2e8f0;
-    --muted: #64748b;
-    --teal: #00b89f;
-    --gold: #c9a84c;
-    --rojo: #ef4444;
-    --azul: #60a5fa;
-    --blanco: #cbd5e1;
-    --colorado: #f87171;
+    --ground: #ffffff;      /* el fondo de la app */
+    --surface: #f6f8fb;     /* las tarjetas */
+    --raised: #eef2f8;      /* el encabezado */
+    --line: #dde3ec;
+    --ink: #16202e;
+    --muted: #6b7891;
+    --teal: #00897a;        /* más oscuro que el de la v1: sobre blanco tiene que leerse */
+    --gold: #a07722;
+    --rojo: #c62828;
+    --azul: #1d4ed8;
+    --blanco: #475569;      /* el equipo blanco, en un gris que se lea sobre blanco */
+    --colorado: #b91c1c;
+    --sobre-color: #ffffff; /* el texto arriba de un fondo de color */
     --serif: Bitter, Georgia, 'Times New Roman', serif;
   }
   * { box-sizing: border-box; }
@@ -48,7 +49,7 @@
   .head-in { max-width: 640px; margin: 0 auto; padding: 13px 14px; display: flex; align-items: center; gap: 11px; }
   .mark {
     width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
-    background: #fff; object-fit: cover;
+    background: #fff; object-fit: cover; border: 1px solid var(--line);
   }
   .brand { flex: 1; }
   .brand b { display: block; color: var(--teal); letter-spacing: 1.5px; font-size: 16px; }
@@ -81,18 +82,19 @@
   .grilla-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips.tres { display: grid; grid-template-columns: repeat(3, 1fr); }
   .chip {
     flex: 1; min-width: 60px; min-height: 48px; background: var(--ground);
     border: 1px solid var(--line); border-radius: 9px; color: var(--muted);
     font: inherit; font-size: 14px; cursor: pointer; padding: 10px 8px;
   }
-  .chip[aria-pressed="true"] { border-color: var(--teal); color: var(--ink); background: rgba(0,184,159,.1); }
+  .chip[aria-pressed="true"] { border-color: var(--teal); color: var(--ink); background: rgba(0,137,122,.09); }
   .chip em { display: block; font-style: normal; font-size: 11px; color: var(--muted); margin-top: 2px; }
   .chip.color { letter-spacing: 1.2px; font-size: 12px; }
-  .chip.color.azul[aria-pressed="true"] { border-color: var(--azul); background: rgba(96,165,250,.12); color: var(--azul); }
-  .chip.color.blanco[aria-pressed="true"] { border-color: var(--blanco); background: rgba(203,213,225,.12); color: var(--blanco); }
-  .chip.color.colorado[aria-pressed="true"] { border-color: var(--colorado); background: rgba(248,113,113,.12); color: var(--colorado); }
-  .chip.color.bicolor[aria-pressed="true"] { border-color: var(--gold); background: rgba(201,168,76,.12); color: var(--gold); }
+  .chip.color.azul[aria-pressed="true"] { border-color: var(--azul); background: rgba(29,78,216,.09); color: var(--azul); }
+  .chip.color.blanco[aria-pressed="true"] { border-color: var(--blanco); background: rgba(71,85,105,.09); color: var(--blanco); }
+  .chip.color.colorado[aria-pressed="true"] { border-color: var(--colorado); background: rgba(185,28,28,.09); color: var(--colorado); }
+  .chip.color.bicolor[aria-pressed="true"] { border-color: var(--gold); background: rgba(160,119,34,.10); color: var(--gold); }
 
   .pista { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
 
@@ -106,15 +108,15 @@
   .quien.apagado { opacity: .45; }
   .quien b { display: block; font-size: 14px; font-weight: 600; }
   .quien > span > span { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
-  .marca { font-size: 10px; letter-spacing: 1px; color: var(--gold); border: 1px solid rgba(201,168,76,.45); border-radius: 4px; padding: 3px 7px; white-space: nowrap; }
-  .marca.listo { color: var(--teal); border-color: rgba(0,184,159,.45); }
+  .marca { font-size: 10px; letter-spacing: 1px; color: var(--gold); border: 1px solid rgba(160,119,34,.45); border-radius: 4px; padding: 3px 7px; white-space: nowrap; }
+  .marca.listo { color: var(--teal); border-color: rgba(0,137,122,.45); }
   .marca.pendiente { color: var(--muted); border-color: var(--line); }
   .quien .hcp { font-size: 13px; color: var(--muted); min-width: 26px; text-align: right; }
   .quien .orden {
     width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; font-size: 11px;
-    display: flex; align-items: center; justify-content: center; color: var(--ground);
+    display: flex; align-items: center; justify-content: center; color: var(--sobre-color);
   }
-  .quien.puesto .orden { background: var(--muted); }
+  .quien.puesto .orden { background: var(--muted); color: var(--sobre-color); }
   .quien.puesto.azul { border-color: var(--azul); }
   .quien.puesto.azul .orden { background: var(--azul); }
   .quien.puesto.blanco { border-color: var(--blanco); }
@@ -132,7 +134,7 @@
   .pin:focus { outline: none; border-color: var(--teal); }
 
   button.primary {
-    width: 100%; background: var(--teal); color: #03130f; border: none; border-radius: 9px;
+    width: 100%; background: var(--teal); color: var(--sobre-color); border: none; border-radius: 9px;
     padding: 15px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 52px;
   }
   button.primary[disabled] { background: var(--surface); color: var(--muted); cursor: not-allowed; }
@@ -144,7 +146,7 @@
   button.ghost:hover:not([disabled]) { color: var(--ink); border-color: var(--muted); }
   button.link { background: none; border: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; padding: 10px; text-decoration: underline; }
   button.peligro {
-    width: 100%; background: var(--rojo); color: #2a0707; border: none; border-radius: 9px;
+    width: 100%; background: var(--rojo); color: var(--sobre-color); border: none; border-radius: 9px;
     padding: 14px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 50px;
   }
   button.peligro[disabled] { opacity: .5; cursor: not-allowed; }
@@ -197,11 +199,11 @@
   .cabecera-jornada b { display: block; font-size: 15px; }
   .cabecera-jornada span { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
   .sello { font-size: 10px; letter-spacing: 1.2px; padding: 5px 10px; border-radius: 4px; font-weight: 700; }
-  .sello.azul { background: rgba(96,165,250,.14); color: var(--azul); }
-  .sello.blanco { background: rgba(203,213,225,.14); color: var(--blanco); }
-  .sello.colorado { background: rgba(248,113,113,.14); color: var(--colorado); }
-  .sello.bicolor { background: rgba(201,168,76,.14); color: var(--gold); }
-  .sello.aap { background: rgba(168,85,247,.14); color: #c084fc; }
+  .sello.azul { background: rgba(29,78,216,.10); color: var(--azul); }
+  .sello.blanco { background: rgba(71,85,105,.10); color: var(--blanco); }
+  .sello.colorado { background: rgba(185,28,28,.10); color: var(--colorado); }
+  .sello.bicolor { background: rgba(160,119,34,.10); color: var(--gold); }
+  .sello.aap { background: rgba(147,51,234,.10); color: #c084fc; }
 
   .caballo { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
   .caballo.usado { border-color: var(--teal); }
@@ -225,7 +227,7 @@
     background: var(--ground); color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
   }
   .chuk.medio { width: 42px; font-size: 12px; }
-  .chuk[data-estado="mio"] { background: var(--teal); border-color: var(--teal); color: #03130f; font-weight: 700; }
+  .chuk[data-estado="mio"] { background: var(--teal); border-color: var(--teal); color: var(--sobre-color); font-weight: 700; }
   .chuk[data-estado="otro"] { opacity: .35; }
   .puntaje { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
   .puntaje span { font-size: 11px; color: var(--muted); flex: 1; }
@@ -281,7 +283,7 @@
   .cancha-fila b { font-size: 16px; }
   .redondel {
     width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; font-size: 20px; font-weight: 700;
-    background: linear-gradient(135deg, var(--teal), #008f7a); color: #03130f;
+    background: linear-gradient(135deg, var(--teal), #008f7a); color: var(--sobre-color);
     display: flex; align-items: center; justify-content: center;
   }
   .insignias { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
@@ -289,6 +291,7 @@
   .cancha-fila em { font-style: normal; font-size: 11px; color: var(--muted); }
   .cancha-fila .chico { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .renglon-dato { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .renglon-dato b { font-size: 14px; }
   .renglon-dato + .renglon-dato { border-top: 1px solid var(--line); }
   .renglon-dato em { display: block; font-style: normal; font-size: 10px; color: var(--muted); letter-spacing: 1px; }
   .renglon-dato b { display: block; font-size: 14px; margin-top: 2px; }
@@ -301,14 +304,39 @@
   .cancha span { display: block; font-size: 13px; margin-top: 2px; }
   .cancha em { display: block; font-style: normal; font-size: 10px; color: var(--muted); }
 
+  /* --- una práctica en la lista, como la planilla de la v1 --- */
+  .practica { margin-bottom: 10px; overflow: hidden; }
+  .practica-cabecera {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    background: var(--raised); border: none; border-bottom: 1px solid var(--line);
+    padding: 11px 14px; cursor: pointer; font: inherit; color: var(--ink);
+  }
+  .practica-cabecera b { display: block; font-size: 14px; }
+  .practica-cabecera > span > span { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .marcadores { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; flex-shrink: 0; }
+  .practica-cabecera .marcadores > span { display: flex; gap: 4px; align-items: baseline; font-size: 15px; white-space: nowrap; }
+  .marcadores i { font-style: normal; color: var(--muted); font-size: 12px; }
+  .equipos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+  .equipo-col { padding: 10px 12px; border-right: 1px solid var(--line); }
+  .equipo-col:last-child { border-right: none; }
+  .equipo-col h4 { margin: 0 0 6px; font-size: 10px; letter-spacing: 1.6px; font-weight: 700; }
+  .renglon-jug { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; padding: 2px 0; }
+  .renglon-jug em { font-style: normal; color: var(--muted); font-size: 11px; }
+  .pie-practica {
+    display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12px;
+    border-top: 1px solid var(--line); color: var(--muted); background: var(--surface);
+  }
+  .pie-practica b { color: var(--ink); }
+  .estrella { color: var(--gold); font-size: 14px; }
+
   .aviso { border-radius: 9px; padding: 12px 14px; font-size: 13px; margin-top: 12px; }
-  .aviso.mal { background: rgba(239,68,68,.09); border: 1px solid var(--rojo); color: #fca5a5; }
+  .aviso.mal { background: rgba(198,40,40,.07); border: 1px solid var(--rojo); color: var(--rojo); }
   .aviso.nota { background: var(--ground); border: 1px solid var(--line); color: var(--muted); }
-  .aviso.ok { background: rgba(0,184,159,.08); border: 1px solid var(--teal); color: var(--teal); }
+  .aviso.ok { background: rgba(0,137,122,.07); border: 1px solid var(--teal); color: var(--teal); }
 
   .vacio { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 14px; }
   .pill { font-size: 10px; letter-spacing: 1.5px; padding: 4px 9px; border-radius: 4px; }
-  .pill.admin { background: rgba(201,168,76,.15); color: var(--gold); }
+  .pill.admin { background: rgba(160,119,34,.13); color: var(--gold); }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>

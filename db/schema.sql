@@ -201,9 +201,12 @@ create table if not exists torneo (
   hora         time,
   cancha       smallint not null check (cancha between 1 and 6),
   jugadores    smallint check (jugadores between 0 and 24),
+  chukkers     smallint not null default 6 check (chukkers between 1 and 12),
   creado_por   uuid references jugador (id) on delete set null,
   creado_en    timestamptz not null default now()
 );
+
+alter table torneo add column if not exists chukkers smallint not null default 6;
 
 create index if not exists torneo_temporada_fecha_idx on torneo (temporada_id, fecha desc);
 

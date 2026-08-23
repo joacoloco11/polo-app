@@ -153,7 +153,7 @@ function vistaArmar(raiz) {
         onchange: (e) => { armado.hora = e.target.value || '17:00'; armado.planilla = null; render(); },
       })),
     ]),
-    campo('Cancha', el('div', { class: 'chips' }, [1, 2, 3, 4, 5, 6].map((n) =>
+    campo('Cancha', el('div', { class: 'chips tres' }, [1, 2, 3, 4, 5, 6].map((n) =>
       el('button', {
         type: 'button', class: 'chip', 'aria-pressed': armado.cancha === n,
         onclick: () => { armado.cancha = n; armado.planilla = null; render(); },
@@ -381,7 +381,10 @@ function panelMarcador(abierta) {
         ? el('span', { class: 'franja' }, ['Ch. ' + (p.orden * 3 - 2) + '-' + p.orden * 3])
         : null,
       el('span', { class: 'lado color ' + p.equipoA + gana(p.golesA, p.golesB) }, [Hoja.LABEL[p.equipoA]]),
-      el('b', {}, [p.golesA + ' - ' + p.golesB]),
+      // Cada número del color del que lo metió.
+      el('b', { class: 'color ' + p.equipoA }, [String(p.golesA)]),
+      el('span', { class: 'guion' }, ['–']),
+      el('b', { class: 'color ' + p.equipoB }, [String(p.golesB)]),
       el('span', { class: 'lado color ' + p.equipoB + gana(p.golesB, p.golesA) }, [Hoja.LABEL[p.equipoB]]),
     ]));
   });
@@ -559,20 +562,53 @@ function vistaPracticas(raiz) {
     return;
   }
 
-  raiz.appendChild(el('div', { class: 'lista' }, practicas.lista.map((p) =>
+  practicas.lista.forEach((p) => raiz.appendChild(tarjetaDePractica(p)));
+}
+
+
+/**
+ * Una práctica como se veía en la v1: los equipos con sus jugadores a la
+ * vista, el marcador de cada enfrentamiento y el MVP con su estrella. Se toca
+ * y se abre la planilla entera.
+ */
+function tarjetaDePractica(p) {
+  const equipos = Object.keys(p.equipos || {});
+  const orden = ['azul', 'blanco', 'colorado', 'bicolor'];
+  const columnas = orden.filter((c) => equipos.includes(c));
+
+  const marcadores = (p.partidos || []).filter((x) => x.golesA !== null && x.golesA !== undefined);
+
+  return el('div', { class: 'card practica' }, [
     el('button', {
-      type: 'button', class: 'quien',
+      type: 'button', class: 'practica-cabecera',
       onclick: () => abrirPractica(p.id),
     }, [
       el('span', { style: 'flex:1;min-width:0' }, [
-        el('b', {}, [fechaLarga(p.fecha.slice(0, 10))]),
-        el('span', {}, ['Cancha ' + p.cancha + ' · ' + String(p.hora).slice(0, 5)
-          + ' hs · ' + p.formato + ' jugadores']),
+        el('b', {}, [fechaLarga(p.fecha)]),
+        el('span', {}, ['Cancha ' + p.cancha + ' · ' + p.hora + ' hs · ' + p.formato + ' jugadores']),
       ]),
-      p.marcador
-        ? el('span', { class: 'marca listo' }, [p.marcador])
+      marcadores.length
+        ? el('span', { class: 'marcadores' }, marcadores.map((x) => el('span', {}, [
+          el('b', { class: 'color ' + x.equipoA }, [String(x.golesA)]),
+          el('i', {}, ['–']),
+          el('b', { class: 'color ' + x.equipoB }, [String(x.golesB)]),
+        ])))
         : el('span', { class: 'marca pendiente' }, ['sin resultado']),
-    ]))));
+    ]),
+
+    el('div', { class: 'equipos-grid' }, columnas.map((color) =>
+      el('div', { class: 'equipo-col' }, [
+        el('h4', { class: 'color ' + color }, [Hoja.LABEL[color]]),
+        ...p.equipos[color].map((j) => el('div', { class: 'renglon-jug' }, [
+          el('span', {}, [j.apodo]),
+          el('em', {}, [hcp(j.handicap)]),
+        ])),
+      ]))),
+
+    p.mvp
+      ? el('div', { class: 'pie-practica' }, [el('span', { class: 'estrella' }, ['★']), 'MVP ', el('b', {}, [p.mvp])])
+      : null,
+  ]);
 }
 
 /* --------------------------------------------------------------- plantel */
@@ -663,7 +699,7 @@ const PESTANAS_ADMIN = [
 ];
 const PESTANAS_JUGADOR = [
   ['practicas', '📋 Prácticas'], ['ranking', '🏆 Ranking'], ['jugador', '👤 Jugador'],
-  ['canchas', '🏟️ Canchas'], ['caballos', '🐴 Caballos'],
+  ['caballos', '🐴 Caballos'],
 ];
 
 /** Lo que cada solapa necesita traído, la primera vez que se la mira. */
@@ -701,7 +737,7 @@ function render() {
   else if (estado.vista === 'caballos') vistaCaballos(raiz);
   else if (estado.vista === 'ranking') vistaRanking(raiz);
   else if (estado.vista === 'jugador') vistaJugador(raiz);
-  else if (estado.vista === 'canchas') vistaCanchas(raiz);
+  else if (estado.vista === 'canchas' && estado.jugador.admin) vistaCanchas(raiz);
   else vistaPracticas(raiz);
 
   app.appendChild(el('div', { class: 'salir' }, [
