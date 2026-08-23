@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e1a">
+<title>San Diego Polo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;700&display=swap">
+<style>
+  :root {
+    --ground: #0a0e1a;
+    --surface: #111827;
+    --raised: #0d1b2e;
+    --line: #1e2d45;
+    --ink: #e2e8f0;
+    --muted: #64748b;
+    --teal: #00b89f;
+    --gold: #c9a84c;
+    --rojo: #ef4444;
+    --azul: #60a5fa;
+    --blanco: #cbd5e1;
+    --colorado: #f87171;
+    --serif: Bitter, Georgia, 'Times New Roman', serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--serif); font-size: 15px; line-height: 1.45;
+    -webkit-text-size-adjust: 100%;
+  }
+  a { color: var(--teal); }
+  :focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 14px 48px; }
+  .hidden { display: none !important; }
+
+  header {
+    background: linear-gradient(135deg, var(--raised), var(--ground));
+    border-bottom: 1px solid var(--line);
+  }
+  .head-in { max-width: 640px; margin: 0 auto; padding: 13px 14px; display: flex; align-items: center; gap: 11px; }
+  .mark {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--teal), #008f7a);
+    display: flex; align-items: center; justify-content: center; color: #03130f;
+  }
+  .brand { flex: 1; }
+  .brand b { display: block; color: var(--teal); letter-spacing: 1.5px; font-size: 16px; }
+  .brand span { display: block; color: var(--muted); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
+
+  h2 { font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 24px 0 10px; }
+  h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: 1.6px; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  .card.p { padding: 14px; }
+
+  input[type="text"], input[type="tel"], input[type="date"], input[type="time"],
+  input[type="number"], textarea {
+    width: 100%; background: var(--ground); border: 1px solid var(--line); border-radius: 9px;
+    padding: 12px 14px; color: var(--ink); font: inherit; font-size: 15px; min-height: 48px;
+  }
+  textarea { min-height: 62px; resize: vertical; }
+  input:focus, textarea:focus { outline: none; border-color: var(--teal); }
+
+  .campo { display: block; margin-bottom: 12px; }
+  .campo > span {
+    display: block; font-size: 10px; letter-spacing: 1.8px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 6px;
+  }
+  .campo:last-child { margin-bottom: 0; }
+  .grilla-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    flex: 1; min-width: 60px; min-height: 48px; background: var(--ground);
+    border: 1px solid var(--line); border-radius: 9px; color: var(--muted);
+    font: inherit; font-size: 14px; cursor: pointer; padding: 10px 8px;
+  }
+  .chip[aria-pressed="true"] { border-color: var(--teal); color: var(--ink); background: rgba(0,184,159,.1); }
+  .chip em { display: block; font-style: normal; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .chip.color { letter-spacing: 1.2px; font-size: 12px; }
+  .chip.color.azul[aria-pressed="true"] { border-color: var(--azul); background: rgba(96,165,250,.12); color: var(--azul); }
+  .chip.color.blanco[aria-pressed="true"] { border-color: var(--blanco); background: rgba(203,213,225,.12); color: var(--blanco); }
+  .chip.color.colorado[aria-pressed="true"] { border-color: var(--colorado); background: rgba(248,113,113,.12); color: var(--colorado); }
+  .chip.color.bicolor[aria-pressed="true"] { border-color: var(--gold); background: rgba(201,168,76,.12); color: var(--gold); }
+
+  .pista { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+
+  .lista { display: flex; flex-direction: column; gap: 6px; }
+  .quien {
+    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 11px 14px; min-height: 54px; cursor: pointer; font: inherit; color: var(--ink);
+  }
+  .quien.estatico { cursor: default; }
+  .quien.apagado { opacity: .45; }
+  .quien b { display: block; font-size: 14px; font-weight: 600; }
+  .quien > span > span { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .quien .marca { font-size: 10px; letter-spacing: 1px; color: var(--gold); border: 1px solid rgba(201,168,76,.45); border-radius: 4px; padding: 3px 7px; }
+  .quien .marca.listo { color: var(--teal); border-color: rgba(0,184,159,.45); }
+  .quien .marca.pendiente { color: var(--muted); border-color: var(--line); }
+  .quien .hcp { font-size: 13px; color: var(--muted); min-width: 26px; text-align: right; }
+  .quien .orden {
+    width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; font-size: 11px;
+    display: flex; align-items: center; justify-content: center; color: var(--ground);
+  }
+  .quien.puesto .orden { background: var(--muted); }
+  .quien.puesto.azul { border-color: var(--azul); }
+  .quien.puesto.azul .orden { background: var(--azul); }
+  .quien.puesto.blanco { border-color: var(--blanco); }
+  .quien.puesto.blanco .orden { background: var(--blanco); }
+  .quien.puesto.colorado { border-color: var(--colorado); }
+  .quien.puesto.colorado .orden { background: var(--colorado); }
+  .quien.puesto.bicolor { border-color: var(--gold); }
+  .quien.puesto.bicolor .orden { background: var(--gold); }
+
+  .pin {
+    width: 100%; text-align: center; letter-spacing: 16px; font-size: 30px; padding: 16px 14px 16px 30px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; color: var(--ink);
+    font-family: var(--serif); min-height: 68px;
+  }
+  .pin:focus { outline: none; border-color: var(--teal); }
+
+  button.primary {
+    width: 100%; background: var(--teal); color: #03130f; border: none; border-radius: 9px;
+    padding: 15px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 52px;
+  }
+  button.primary[disabled] { background: var(--surface); color: var(--muted); cursor: not-allowed; }
+  button.ghost {
+    width: 100%; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 9px;
+    padding: 12px; font: inherit; font-size: 14px; cursor: pointer; min-height: 48px;
+  }
+  button.ghost[disabled] { opacity: .45; cursor: not-allowed; }
+  button.ghost:hover:not([disabled]) { color: var(--ink); border-color: var(--muted); }
+  button.link { background: none; border: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; padding: 10px; text-decoration: underline; }
+  button.peligro {
+    width: 100%; background: var(--rojo); color: #2a0707; border: none; border-radius: 9px;
+    padding: 14px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 50px;
+  }
+  button.peligro[disabled] { opacity: .5; cursor: not-allowed; }
+  .acciones { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .salir { text-align: center; margin-top: 26px; }
+
+  .pestanas { display: flex; gap: 6px; margin: 14px 0 4px; }
+  .pestana {
+    flex: 1; background: none; border: none; border-bottom: 2px solid var(--line);
+    color: var(--muted); font: inherit; font-size: 13px; padding: 10px 4px; cursor: pointer; min-height: 44px;
+  }
+  .pestana[aria-pressed="true"] { color: var(--teal); border-bottom-color: var(--teal); }
+
+  .cabecera-hoja { margin-bottom: 14px; }
+  .cabecera-hoja b { display: block; font-size: 17px; }
+  .cabecera-hoja span { font-size: 12px; color: var(--muted); }
+  .equipos-tabla { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+  .equipo { border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; }
+  .equipo .renglon { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; padding: 3px 0; }
+  .equipo .renglon.de-mas span { font-weight: 700; }
+  .equipo .renglon em { font-style: normal; font-size: 12px; color: var(--muted); }
+  .equipo .suma { font-size: 11px; color: var(--muted); margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+  .bicolor-caja { margin-top: 12px; }
+  h3.color.azul { color: var(--azul); }
+  h3.color.blanco { color: var(--blanco); }
+  h3.color.colorado { color: var(--colorado); }
+  h3.color.bicolor { color: var(--gold); }
+  .franjas { margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .franjas div { padding: 2px 0; }
+  .nota-hoja {
+    margin-top: 12px; border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 13px; white-space: pre-wrap;
+  }
+
+  /* --- mis caballos --- */
+  select {
+    width: 100%; background: var(--ground); border: 1px solid var(--line); border-radius: 9px;
+    padding: 12px 14px; color: var(--ink); font: inherit; font-size: 15px; min-height: 48px;
+    appearance: none;
+  }
+  select:focus { outline: none; border-color: var(--teal); }
+  .fila { display: flex; gap: 8px; }
+  .cabecera-jornada { display: flex; align-items: center; gap: 12px; }
+  .cabecera-jornada b { display: block; font-size: 15px; }
+  .cabecera-jornada span { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .sello { font-size: 10px; letter-spacing: 1.2px; padding: 5px 10px; border-radius: 4px; font-weight: 700; }
+  .sello.azul { background: rgba(96,165,250,.14); color: var(--azul); }
+  .sello.blanco { background: rgba(203,213,225,.14); color: var(--blanco); }
+  .sello.colorado { background: rgba(248,113,113,.14); color: var(--colorado); }
+  .sello.bicolor { background: rgba(201,168,76,.14); color: var(--gold); }
+  .sello.aap { background: rgba(168,85,247,.14); color: #c084fc; }
+
+  .caballo { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
+  .caballo.usado { border-color: var(--teal); }
+  .caballo.lesionado { border-color: var(--rojo); }
+  .cab-head { display: flex; align-items: center; gap: 9px; }
+  .cab-head b { flex: 1; font-size: 14px; }
+  .cab-head i { font-style: normal; font-size: 11px; color: var(--teal); }
+  .cruz { color: var(--rojo); font-size: 13px; }
+  .lesion { font-size: 11px; color: var(--rojo); margin-top: 5px; }
+  .sacar, .marcar {
+    background: none; border: none; color: var(--muted); font: inherit; font-size: 20px;
+    line-height: 1; cursor: pointer; padding: 4px 8px; min-height: 32px;
+  }
+  .marcar { font-size: 15px; }
+  .marcar.activa { color: var(--rojo); }
+  .marcar:hover { color: var(--rojo); }
+  .sacar:hover { color: var(--rojo); }
+  .chuks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .chuk {
+    width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--ground); color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .chuk.medio { width: 42px; font-size: 12px; }
+  .chuk[data-estado="mio"] { background: var(--teal); border-color: var(--teal); color: #03130f; font-weight: 700; }
+  .chuk[data-estado="otro"] { opacity: .35; }
+  .puntaje { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .puntaje span { font-size: 11px; color: var(--muted); flex: 1; }
+  .puntaje select { width: auto; min-width: 78px; }
+  .guardado { font-size: 11px; color: var(--teal); text-align: right; margin: 6px 0 0; }
+  .guardado.mal { color: var(--rojo); }
+  .numeros { display: flex; gap: 10px; margin-top: 12px; }
+  .numeros > div { flex: 1; text-align: center; }
+  .numeros b { display: block; font-size: 24px; line-height: 1.1; }
+  .numeros b.teal { color: var(--teal); }
+  .numeros b.oro { color: var(--gold); }
+  .numeros span { display: block; font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .puesto-nro { width: 24px; text-align: center; font-size: 13px; color: var(--muted); flex-shrink: 0; }
+  .puesto-nro.podio { color: var(--gold); }
+  .hcp.teal { color: var(--teal); font-weight: 700; }
+
+  .aviso { border-radius: 9px; padding: 12px 14px; font-size: 13px; margin-top: 12px; }
+  .aviso.mal { background: rgba(239,68,68,.09); border: 1px solid var(--rojo); color: #fca5a5; }
+  .aviso.nota { background: var(--ground); border: 1px solid var(--line); color: var(--muted); }
+  .aviso.ok { background: rgba(0,184,159,.08); border: 1px solid var(--teal); color: var(--teal); }
+
+  .vacio { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 14px; }
+  .pill { font-size: 10px; letter-spacing: 1.5px; padding: 4px 9px; border-radius: 4px; }
+  .pill.admin { background: rgba(201,168,76,.15); color: var(--gold); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-in">
+    <div class="mark" aria-hidden="true">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20v-8a5 5 0 0 1 10 0v8"/><path d="M5 20h4M15 20h4"/></svg>
+    </div>
+    <div class="brand"><b>SAN DIEGO</b><span id="subtitulo">Club de Campo</span></div>
+    <div id="chip-admin"></div>
+  </div>
+</header>
+
+<main class="wrap" id="app">
+  <div class="vacio">Cargando…</div>
+</main>
+
+<script src="logo.js"></script>
+<script src="hoja.js"></script>
+<script src="comun.js"></script>
+<script src="caballos.js"></script>
+<script src="armar.js"></script>
+<script>
+/* ------------------------------------------------------------------ entrar */
+
+const app = document.getElementById('app');
+let plantelPublico = [];
+let quien = null;
+let filtro = '';
+
+function pantallaNombre(mensaje) {
+  vaciar(app);
+  app.appendChild(el('h2', {}, ['Quién sos']));
+
+  const buscar = el('input', {
+    type: 'text', placeholder: 'Buscar tu nombre…', value: filtro,
+    oninput: (e) => { filtro = e.target.value; dibujarLista(); },
+  });
+  app.appendChild(buscar);
+
+  const lista = el('div', { class: 'lista', style: 'margin-top:10px' });
+  app.appendChild(lista);
+
+  function dibujarLista() {
+    vaciar(lista);
+    const texto = filtro.trim().toLowerCase();
+    const visibles = plantelPublico.filter((j) =>
+      !texto || j.apodo.toLowerCase().includes(texto) || j.nombre.toLowerCase().includes(texto));
+
+    if (!visibles.length) {
+      lista.appendChild(el('div', { class: 'vacio' }, ['No hay nadie con ese nombre.']));
+      return;
+    }
+    visibles.forEach((j) => {
+      lista.appendChild(el('button', {
+        class: 'quien', type: 'button',
+        onclick: () => { quien = j; pantallaPin(); },
+      }, [
+        el('span', { style: 'flex:1' }, [
+          el('b', {}, [j.apodo]),
+          el('span', {}, [j.nombre]),
+        ]),
+        j.activado ? null : el('span', { class: 'marca' }, ['NUEVO']),
+      ]));
+    });
+  }
+  dibujarLista();
+
+  if (mensaje) app.appendChild(aviso('nota', mensaje));
+}
+
+function pantallaPin(errorTexto) {
+  vaciar(app);
+  const primeraVez = !quien.activado;
+
+  app.appendChild(el('h2', {}, [primeraVez ? 'Elegí tu PIN' : 'Tu PIN']));
+  app.appendChild(el('div', { class: 'card', style: 'padding:13px 15px;margin-bottom:14px' }, [
+    el('div', { style: 'font-size:15px;font-weight:600' }, [quien.apodo]),
+    el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' }, [quien.nombre]),
+  ]));
+
+  const pin = el('input', {
+    class: 'pin', type: 'tel', inputmode: 'numeric', maxlength: '4',
+    autocomplete: 'off', placeholder: '••••', 'aria-label': 'PIN de 4 números',
+  });
+  pin.addEventListener('input', () => {
+    pin.value = pin.value.replace(/\D/g, '').slice(0, 4);
+    entrar.disabled = pin.value.length !== 4;
+  });
+  pin.addEventListener('keydown', (e) => { if (e.key === 'Enter' && pin.value.length === 4) mandar(); });
+  app.appendChild(pin);
+
+  const entrar = el('button', {
+    class: 'primary', type: 'button', disabled: true, style: 'margin-top:14px',
+    onclick: () => mandar(),
+  }, [primeraVez ? 'Guardar y entrar' : 'Entrar']);
+  app.appendChild(entrar);
+
+  app.appendChild(el('div', { style: 'text-align:center;margin-top:6px' }, [
+    el('button', { class: 'link', type: 'button', onclick: () => { quien = null; pantallaNombre(); } }, ['No soy yo']),
+  ]));
+
+  if (errorTexto) app.appendChild(aviso('mal', errorTexto));
+  else if (primeraVez) {
+    app.appendChild(aviso('nota',
+      'Es tu primera vez: el PIN que pongas ahora queda como el tuyo. Elegí cuatro números que te acuerdes — si te lo olvidás, te lo resetea un administrador.'));
+  }
+
+  setTimeout(() => pin.focus(), 60);
+
+  async function mandar() {
+    entrar.disabled = true;
+    entrar.textContent = 'Entrando…';
+    try {
+      const r = await pedir('/api/login', {
+        method: 'POST',
+        body: JSON.stringify({ jugadorId: quien.id, pin: pin.value }),
+      });
+      adentro(r.jugador, null);
+    } catch (e) {
+      pantallaPin(e.message);
+    }
+  }
+}
+
+/* ---------------------------------------------------------------- arranque */
+
+(async function arrancar() {
+  try {
+    const sesion = await pedir('/api/sesion');
+    adentro(sesion.jugador, sesion.temporada);
+    return;
+  } catch (e) { /* sin sesión: a elegir nombre */ }
+
+  try {
+    plantelPublico = (await pedir('/api/plantel')).jugadores;
+    pantallaNombre();
+  } catch (e) {
+    vaciar(app);
+    app.appendChild(aviso('mal', 'No se pudo cargar el plantel. ' + e.message));
+  }
+})();
+</script>
+</body>
+</html>
