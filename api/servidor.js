@@ -32,6 +32,9 @@ const RUTAS = {
   caballos: require('../lib/rutas/caballos'),
   jornadas: require('../lib/rutas/jornadas'),
   jornada: require('../lib/rutas/jornada'),
+  resultado: require('../lib/rutas/resultado'),
+  ranking: require('../lib/rutas/ranking'),
+  jugador: require('../lib/rutas/jugador'),
 };
 
 /**

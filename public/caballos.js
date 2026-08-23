@@ -594,7 +594,12 @@ function panelEstadisticas(raiz) {
         el('span', {}, [detalle]),
       ]),
       s.chukkers7 >= 6 ? el('span', { class: 'marca' }, [cantidad(s.chukkers7) + ' en 7d']) : null,
-      el('span', { class: 'hcp teal' }, [cantidad(s.chukkers)]),
+      // El número grande es aquello por lo que se está ordenando.
+      el('span', { class: 'hcp teal' }, [
+        caballos.orden === 'promedio'
+          ? (s.promedio === null ? '—' : unDecimal(s.promedio))
+          : cantidad(s.chukkers),
+      ]),
     ]);
   })));
 
@@ -629,17 +634,33 @@ function enTexto(cosas) {
   return cosas.slice(0, -1).join(', ') + ' y ' + cosas[cosas.length - 1];
 }
 
+/**
+ * Como se manda al grupo: el número del chukker y el caballo, sin más palabras.
+ * En el torneo los dos medios van en el mismo renglón — "3: Malvina / Pampa" —
+ * que es como se lee de un vistazo.
+ */
 function textoDeCaballos(evento) {
-  const nombreDe = (id) => (caballos.caballada.find((c) => c.id === id) || {}).nombre || '?';
+  const nombreDe = (id) => (caballos.caballada.find((c) => c.id === id) || {}).nombre || '—';
   const lineas = [
     evento.tipo === 'aap'
       ? evento.titulo + ' — ' + Hoja.fechaCorta(evento.fecha)
       : 'Caballos — ' + Hoja.fechaCorta(evento.fecha) + ' · ' + evento.detalle,
     '',
   ];
-  evento.misChukkers.forEach((c) => {
-    lineas.push(nombreDelLugar(evento, c) + ': ' + (evento.uso[c] ? nombreDe(evento.uso[c]) : '—'));
-  });
+
+  if (evento.medios) {
+    for (let c = 1; c <= evento.chukkers; c++) {
+      const primero = evento.uso[c * 2 - 1];
+      const segundo = evento.uso[c * 2];
+      if (!primero && !segundo) continue;
+      lineas.push(c + ': ' + nombreDe(primero) + ' / ' + nombreDe(segundo));
+    }
+  } else {
+    evento.misChukkers.forEach((c) => {
+      lineas.push(c + ': ' + nombreDe(evento.uso[c]));
+    });
+  }
+
   const puntuados = Object.keys(evento.puntajes);
   if (puntuados.length) {
     lineas.push('');

@@ -11,7 +11,8 @@ const assert = require('node:assert/strict');
 
 const {
   FORMATOS, generarPlanilla, verificarPlanilla, formacionPorChukker, anotacion,
-  repartirPorHandicap, desbalance, desdeGuardado, paraPantalla, ErrorDeArmado,
+  repartirPorHandicap, desbalance, desdeGuardado, paraPantalla,
+  enfrentamientos, puntosDelPartido, hcpDeLaPractica, ErrorDeArmado,
 } = require('../lib/polo');
 
 const j = (apodo, color, handicap = 0) => ({ id: apodo, apodo, nombre: apodo, handicap, color });
@@ -274,4 +275,75 @@ test('la planilla guardada se vuelve a leer igual', () => {
     assert.deepEqual(leida.hcpPorEquipo, escrita.hcpPorEquipo);
     assert.deepEqual(leida.formacion, escrita.formacion);
   }
+});
+
+// ---------------------------------------------------- resultados y puntos
+
+test('los enfrentamientos salen del formato', () => {
+  for (const cantidad of [8, 9, 10]) {
+    assert.deepEqual(enfrentamientos(cantidad).map((e) => [e.equipoA, e.equipoB]),
+      [['azul', 'blanco']], `formato ${cantidad}`);
+  }
+  assert.deepEqual(enfrentamientos(12).map((e) => [e.orden, e.equipoA, e.equipoB, e.desde, e.hasta]), [
+    [1, 'azul', 'blanco', 1, 3],
+    [2, 'blanco', 'colorado', 4, 6],
+    [3, 'colorado', 'azul', 7, 9],
+  ]);
+});
+
+test('ganar suma 3 y empatar 1', () => {
+  const partido = { equipoA: 'azul', equipoB: 'blanco', golesA: 6, golesB: 4 };
+  assert.equal(puntosDelPartido(10, 'azul', partido), 3);
+  assert.equal(puntosDelPartido(10, 'blanco', partido), 0);
+
+  const empate = { equipoA: 'azul', equipoB: 'blanco', golesA: 4, golesB: 4 };
+  assert.equal(puntosDelPartido(10, 'azul', empate), 1);
+  assert.equal(puntosDelPartido(10, 'blanco', empate), 1);
+
+  // Sin resultado cargado todavía no hay puntos.
+  assert.equal(puntosDelPartido(10, 'azul', { equipoA: 'azul', equipoB: 'blanco', golesA: null, golesB: null }), 0);
+});
+
+test('el bicolor se lleva el promedio de los dos equipos', () => {
+  const gana = { equipoA: 'azul', equipoB: 'blanco', golesA: 7, golesB: 4 };
+  assert.equal(puntosDelPartido(9, 'bicolor', gana), 1.5);
+  const empate = { equipoA: 'azul', equipoB: 'blanco', golesA: 4, golesB: 4 };
+  assert.equal(puntosDelPartido(9, 'bicolor', empate), 1);
+});
+
+test('en las de 12 los enfrentamientos valen la mitad y el máximo sigue siendo 3', () => {
+  const resultados = [
+    { equipoA: 'azul', equipoB: 'blanco', golesA: 5, golesB: 3 },     // gana azul
+    { equipoA: 'blanco', equipoB: 'colorado', golesA: 4, golesB: 4 }, // empate
+    { equipoA: 'colorado', equipoB: 'azul', golesA: 6, golesB: 2 },   // gana colorado
+  ];
+  const total = (equipo) => resultados.reduce((a, p) => a + puntosDelPartido(12, equipo, p), 0);
+
+  assert.equal(total('azul'), 1.5);      // ganó uno, perdió el otro
+  assert.equal(total('blanco'), 0.5);    // perdió uno, empató el otro
+  assert.equal(total('colorado'), 2);    // empató uno, ganó el otro
+
+  // Cada equipo juega dos de los tres: el que descansa no suma.
+  assert.equal(puntosDelPartido(12, 'colorado', resultados[0]), 0);
+
+  // Ganando los dos que le tocan, un equipo llega al mismo tope que en las otras.
+  const gananTodo = [
+    { equipoA: 'azul', equipoB: 'blanco', golesA: 5, golesB: 1 },
+    { equipoA: 'blanco', equipoB: 'colorado', golesA: 1, golesB: 5 },
+    { equipoA: 'colorado', equipoB: 'azul', golesA: 1, golesB: 5 },
+  ];
+  assert.equal(gananTodo.reduce((a, p) => a + puntosDelPartido(12, 'azul', p), 0), 3);
+});
+
+test('el handicap de la práctica es el promedio de los cuatro de cada equipo', () => {
+  const j = (handicap) => ({ handicap });
+  // Cinco por equipo: cuentan los cuatro más altos.
+  const diez = { azul: [j(5), j(2), j(1), j(0), j(-1)], blanco: [j(3), j(3), j(1), j(1), j(0)] };
+  assert.equal(hcpDeLaPractica(diez), 8);   // (5+2+1+0) y (3+3+1+1) -> 8 y 8
+
+  // El bicolor suma en los dos lados.
+  const nueve = { azul: [j(1), j(0), j(0), j(0)], blanco: [j(1), j(0), j(0), j(0)], bicolor: [j(3)] };
+  assert.equal(hcpDeLaPractica(nueve), 4);
+
+  assert.equal(hcpDeLaPractica({}), null);
 });

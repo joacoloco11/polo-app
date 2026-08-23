@@ -95,9 +95,9 @@
   .quien.apagado { opacity: .45; }
   .quien b { display: block; font-size: 14px; font-weight: 600; }
   .quien > span > span { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
-  .quien .marca { font-size: 10px; letter-spacing: 1px; color: var(--gold); border: 1px solid rgba(201,168,76,.45); border-radius: 4px; padding: 3px 7px; }
-  .quien .marca.listo { color: var(--teal); border-color: rgba(0,184,159,.45); }
-  .quien .marca.pendiente { color: var(--muted); border-color: var(--line); }
+  .marca { font-size: 10px; letter-spacing: 1px; color: var(--gold); border: 1px solid rgba(201,168,76,.45); border-radius: 4px; padding: 3px 7px; white-space: nowrap; }
+  .marca.listo { color: var(--teal); border-color: rgba(0,184,159,.45); }
+  .marca.pendiente { color: var(--muted); border-color: var(--line); }
   .quien .hcp { font-size: 13px; color: var(--muted); min-width: 26px; text-align: right; }
   .quien .orden {
     width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; font-size: 11px;
@@ -140,10 +140,16 @@
   .acciones { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
   .salir { text-align: center; margin-top: 26px; }
 
-  .pestanas { display: flex; gap: 6px; margin: 14px 0 4px; }
+  /* Con cinco pestañas no entran de frente en un celular: se deslizan. */
+  .pestanas {
+    display: flex; gap: 4px; margin: 14px 0 4px;
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .pestanas::-webkit-scrollbar { display: none; }
   .pestana {
-    flex: 1; background: none; border: none; border-bottom: 2px solid var(--line);
-    color: var(--muted); font: inherit; font-size: 13px; padding: 10px 4px; cursor: pointer; min-height: 44px;
+    flex: 1 0 auto; background: none; border: none; border-bottom: 2px solid var(--line);
+    color: var(--muted); font: inherit; font-size: 13px; padding: 10px 10px; cursor: pointer;
+    min-height: 44px; white-space: nowrap;
   }
   .pestana[aria-pressed="true"] { color: var(--teal); border-bottom-color: var(--teal); }
 
@@ -225,6 +231,51 @@
   .puesto-nro.podio { color: var(--gold); }
   .hcp.teal { color: var(--teal); font-weight: 700; }
 
+  /* --- resultados y ranking --- */
+  .marcador { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13px; }
+  .marcador b { font-size: 17px; }
+  .marcador .franja { font-size: 10px; color: var(--muted); min-width: 62px; }
+  .lado { font-size: 11px; letter-spacing: 1.2px; }
+  .lado.ganador { font-weight: 700; }
+  .color.azul { color: var(--azul); }
+  .color.blanco { color: var(--blanco); }
+  .color.colorado { color: var(--colorado); }
+  .color.bicolor { color: var(--gold); }
+  .mvp { display: flex; gap: 10px; align-items: center; margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .mvp span { font-size: 10px; letter-spacing: 2px; color: var(--gold); }
+  .cargar-gol { margin-bottom: 12px; }
+  .cargar-gol .franja { font-size: 10px; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 5px; }
+  .cargar-gol .fila { align-items: center; }
+  .cargar-gol input { width: 62px; text-align: center; padding: 10px 4px; }
+  .cargar-gol .lado { min-width: 62px; }
+  .cargar-gol .guion { color: var(--muted); }
+
+  .cabecera-ranking { display: flex; align-items: center; gap: 6px; padding: 0 14px 6px; }
+  .cabecera-ranking .hueco { flex: 1; }
+  .cabecera-ranking .col {
+    width: 46px; background: none; border: none; color: var(--muted); font: inherit;
+    font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;
+    padding: 8px 0; text-align: center; min-height: 36px;
+  }
+  .cabecera-ranking .col[aria-pressed="true"] { color: var(--teal); }
+  .fila-ranking .num { width: 46px; text-align: center; font-size: 13px; color: var(--muted); flex-shrink: 0; }
+  .fila-ranking .num.fuerte { color: var(--teal); font-weight: 700; font-size: 16px; }
+
+  .ficha b { display: block; font-size: 18px; color: var(--teal); }
+  .ficha span { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .renglon-dato { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .renglon-dato + .renglon-dato { border-top: 1px solid var(--line); }
+  .renglon-dato em { display: block; font-style: normal; font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+  .renglon-dato b { display: block; font-size: 14px; margin-top: 2px; }
+  .canchas { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cancha {
+    flex: 1; min-width: 68px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 9px; padding: 9px 6px; text-align: center;
+  }
+  .cancha b { display: block; font-size: 17px; color: var(--teal); }
+  .cancha span { display: block; font-size: 13px; margin-top: 2px; }
+  .cancha em { display: block; font-style: normal; font-size: 10px; color: var(--muted); }
+
   .aviso { border-radius: 9px; padding: 12px 14px; font-size: 13px; margin-top: 12px; }
   .aviso.mal { background: rgba(239,68,68,.09); border: 1px solid var(--rojo); color: #fca5a5; }
   .aviso.nota { background: var(--ground); border: 1px solid var(--line); color: var(--muted); }
@@ -256,6 +307,7 @@
 <script src="hoja.js"></script>
 <script src="comun.js"></script>
 <script src="caballos.js"></script>
+<script src="ranking.js"></script>
 <script src="armar.js"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */

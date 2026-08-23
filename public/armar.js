@@ -327,7 +327,10 @@ function panelPlanilla(planilla, cabecera, sinPublicar) {
 
 /* ------------------------------------------------------------- prácticas */
 
-const practicas = { lista: null, abierta: null, error: null, borrando: false };
+const practicas = {
+  lista: null, abierta: null, error: null, borrando: false,
+  resultado: { partidos: {}, mvpId: '' },
+};
 
 async function cargarPracticas() {
   try {
@@ -343,10 +346,132 @@ async function abrirPractica(id) {
     practicas.abierta = await pedir('/api/practica?id=' + encodeURIComponent(id));
     practicas.borrando = false;
     practicas.error = null;
+    // El formulario del resultado arranca con lo que ya estaba cargado.
+    practicas.resultado = {
+      partidos: Object.fromEntries(practicas.abierta.partidos.map((p) => [
+        p.orden, { golesA: p.golesA, golesB: p.golesB },
+      ])),
+      mvpId: practicas.abierta.practica.mvp_id || '',
+    };
   } catch (e) {
     practicas.error = e.message;
   }
   render();
+}
+
+/* ------------------------------------------------------- el resultado */
+
+const hayResultado = (partidos) =>
+  partidos.some((p) => p.golesA !== null && p.golesA !== undefined);
+
+/** El marcador, como lo lee cualquiera. */
+function panelMarcador(abierta) {
+  const { partidos, mvp, practica } = abierta;
+  if (!hayResultado(partidos) && !mvp) return null;
+
+  const caja = el('div', { class: 'card p', style: 'margin-top:14px' }, [
+    el('h3', { style: 'color:var(--muted);letter-spacing:2px' }, ['RESULTADO']),
+  ]);
+
+  partidos.forEach((p) => {
+    if (p.golesA === null || p.golesA === undefined) return;
+    const gana = (a, b) => (a > b ? ' ganador' : '');
+    caja.appendChild(el('div', { class: 'marcador' }, [
+      practica.formato === 12
+        ? el('span', { class: 'franja' }, ['Ch. ' + (p.orden * 3 - 2) + '-' + p.orden * 3])
+        : null,
+      el('span', { class: 'lado color ' + p.equipoA + gana(p.golesA, p.golesB) }, [Hoja.LABEL[p.equipoA]]),
+      el('b', {}, [p.golesA + ' - ' + p.golesB]),
+      el('span', { class: 'lado color ' + p.equipoB + gana(p.golesB, p.golesA) }, [Hoja.LABEL[p.equipoB]]),
+    ]));
+  });
+
+  if (mvp) {
+    caja.appendChild(el('div', { class: 'mvp' }, [
+      el('span', {}, ['MVP']), el('b', {}, [mvp.apodo]),
+    ]));
+  }
+  return caja;
+}
+
+/** El formulario, solo para administradores. */
+function panelCargarResultado(abierta) {
+  const { partidos, practica, planilla } = abierta;
+  const estado = practicas.resultado;
+
+  const caja = el('div', { class: 'card p', style: 'margin-top:14px' }, [
+    el('h3', { style: 'color:var(--muted);letter-spacing:2px' }, [
+      hayResultado(partidos) ? 'CORREGIR EL RESULTADO' : 'CARGAR EL RESULTADO',
+    ]),
+  ]);
+
+  partidos.forEach((p) => {
+    const mio = estado.partidos[p.orden] || (estado.partidos[p.orden] = { golesA: null, golesB: null });
+    const gol = (lado) => {
+      const campo = el('input', {
+        type: 'number', min: 0, max: 99, inputmode: 'numeric',
+        value: mio[lado] === null || mio[lado] === undefined ? '' : String(mio[lado]),
+        'aria-label': 'Goles de ' + Hoja.LABEL[lado === 'golesA' ? p.equipoA : p.equipoB],
+      });
+      campo.addEventListener('input', (e) => {
+        mio[lado] = e.target.value === '' ? null : Number(e.target.value);
+      });
+      return campo;
+    };
+
+    caja.appendChild(el('div', { class: 'cargar-gol' }, [
+      practica.formato === 12
+        ? el('div', { class: 'franja' }, ['Chukkers ' + (p.orden * 3 - 2) + ' a ' + p.orden * 3])
+        : null,
+      el('div', { class: 'fila' }, [
+        el('span', { class: 'lado color ' + p.equipoA }, [Hoja.LABEL[p.equipoA]]),
+        gol('golesA'),
+        el('span', { class: 'guion' }, ['–']),
+        gol('golesB'),
+        el('span', { class: 'lado color ' + p.equipoB }, [Hoja.LABEL[p.equipoB]]),
+      ]),
+    ]));
+  });
+
+  const mvp = el('select', { 'aria-label': 'MVP de la práctica' });
+  mvp.appendChild(el('option', { value: '' }, ['— sin MVP —']));
+  planilla.jugadores.forEach((j) => {
+    const op = el('option', { value: j.id }, [j.apodo]);
+    if (estado.mvpId === j.id) op.selected = true;
+    mvp.appendChild(op);
+  });
+  mvp.addEventListener('change', (e) => { estado.mvpId = e.target.value; });
+  caja.appendChild(el('label', { class: 'campo', style: 'margin-top:12px' }, [
+    el('span', {}, ['MVP']), mvp,
+  ]));
+
+  caja.appendChild(el('p', { class: 'pista' }, [
+    practica.formato === 12
+      ? 'Cada enfrentamiento ganado suma 1,5 puntos y el empate 0,5: en las de 12 valen la mitad, porque cada uno juega dos.'
+      : 'Ganar suma 3 puntos a los del equipo y empatar 1.',
+  ]));
+
+  caja.appendChild(el('div', { class: 'acciones' }, [
+    el('button', {
+      class: 'primary', type: 'button',
+      onclick: (e) => conBoton(e.target, async () => {
+        await pedir('/api/resultado', {
+          method: 'POST',
+          body: JSON.stringify({
+            practicaId: practica.id,
+            partidos: Object.entries(estado.partidos).map(([orden, g]) => ({ orden: Number(orden), ...g })),
+            mvpId: estado.mvpId || null,
+          }),
+        });
+        await abrirPractica(practica.id);
+        practicas.lista = null;
+        cargarPracticas();
+        rankingSucio = true;   // cambió el ranking
+      }, practicas),
+    }, ['Guardar el resultado']),
+  ]));
+
+  return caja;
 }
 
 /**
@@ -407,6 +532,11 @@ function vistaPracticas(raiz) {
       cancha: practica.cancha,
       notas: practica.notas || '',
     }, false));
+
+    const marcador = panelMarcador(practicas.abierta);
+    if (marcador) raiz.appendChild(marcador);
+    if (estado.jugador.admin) raiz.appendChild(panelCargarResultado(practicas.abierta));
+
     if (practicas.error) raiz.appendChild(aviso('mal', practicas.error));
     if (estado.jugador.admin) raiz.appendChild(panelBorrar(practica));
     return;
@@ -430,12 +560,14 @@ function vistaPracticas(raiz) {
       type: 'button', class: 'quien',
       onclick: () => abrirPractica(p.id),
     }, [
-      el('span', { style: 'flex:1' }, [
+      el('span', { style: 'flex:1;min-width:0' }, [
         el('b', {}, [fechaLarga(p.fecha.slice(0, 10))]),
         el('span', {}, ['Cancha ' + p.cancha + ' · ' + String(p.hora).slice(0, 5)
           + ' hs · ' + p.formato + ' jugadores']),
       ]),
-      p.estado === 'cerrada' ? el('span', { class: 'marca' }, ['CERRADA']) : null,
+      p.marcador
+        ? el('span', { class: 'marca listo' }, [p.marcador])
+        : el('span', { class: 'marca pendiente' }, ['sin resultado']),
     ]))));
 }
 
@@ -521,8 +653,9 @@ function vistaPlantel(raiz) {
 
 function pestanas() {
   const cuales = estado.jugador.admin
-    ? [['armar', 'Armar'], ['practicas', 'Prácticas'], ['caballos', 'Mis caballos'], ['plantel', 'Plantel']]
-    : [['practicas', 'Prácticas'], ['caballos', 'Mis caballos']];
+    ? [['armar', 'Armar'], ['practicas', 'Prácticas'], ['ranking', 'Ranking'],
+      ['caballos', 'Mis caballos'], ['plantel', 'Plantel']]
+    : [['practicas', 'Prácticas'], ['ranking', 'Ranking'], ['caballos', 'Mis caballos']];
 
   return el('nav', { class: 'pestanas' }, cuales.map(([id, texto]) =>
     el('button', {
@@ -531,6 +664,8 @@ function pestanas() {
         // Al salir de la carga de caballos se guarda lo que quedó pendiente.
         if (estado.vista === 'caballos' && id !== 'caballos') guardarAhora();
         estado.vista = id;
+        // El ranking se trae recién cuando se lo mira, y de nuevo si algo cambió.
+        if (id === 'ranking' && (!ranking.lista || rankingSucio)) cargarRanking();
         render();
       },
     }, [texto])));
@@ -546,6 +681,7 @@ function render() {
   if (estado.vista === 'armar' && estado.jugador.admin) vistaArmar(raiz);
   else if (estado.vista === 'plantel' && estado.jugador.admin) vistaPlantel(raiz);
   else if (estado.vista === 'caballos') vistaCaballos(raiz);
+  else if (estado.vista === 'ranking') vistaRanking(raiz);
   else vistaPracticas(raiz);
 
   app.appendChild(el('div', { class: 'salir' }, [

@@ -164,13 +164,27 @@ create trigger practica_jugador_equipo_valido
   for each row execute function equipo_valido_para_formato();
 
 -- --------------------------------------------------------------- resultados
+--
+-- Una práctica de 8, 9 o 10 es un partido solo: azul contra blanco. Una de 12
+-- son tres, uno por franja de chukkers — por eso el resultado no cuelga del
+-- equipo sino del enfrentamiento.
 
-create table if not exists practica_resultado (
+create table if not exists practica_partido (
   practica_id uuid not null references practica (id) on delete cascade,
-  equipo      color_equipo not null check (equipo <> 'bicolor'),
-  goles       smallint not null check (goles >= 0),
-  primary key (practica_id, equipo)
+  orden       smallint not null check (orden between 1 and 3),
+  equipo_a    color_equipo not null check (equipo_a <> 'bicolor'),
+  equipo_b    color_equipo not null check (equipo_b <> 'bicolor'),
+  goles_a     smallint check (goles_a >= 0),
+  goles_b     smallint check (goles_b >= 0),
+  primary key (practica_id, orden),
+  constraint partido_entre_dos check (equipo_a <> equipo_b),
+  -- O están los dos marcadores o no está ninguno: medio resultado no sirve.
+  constraint partido_resultado_entero check ((goles_a is null) = (goles_b is null))
 );
+
+-- La versión anterior guardaba un gol por equipo y no servía para las de 12.
+-- Nunca llegó a usarse.
+drop table if exists practica_resultado;
 
 -- ------------------------------------------------------------------ jornadas
 --
@@ -236,24 +250,72 @@ drop table if exists chukker_caballo;
 
 -- ------------------------------------------------------------------- vistas
 
--- Ranking de participación de la temporada. Lo ve todo el club, así que sale
--- del plantel público: sin PIN y sin handicap interno.
+-- Lo que vale un partido para el que lo jugó: 3 el ganado, 1 el empatado.
+create or replace function puntos_de(propios smallint, ajenos smallint)
+returns numeric language sql immutable as $$
+  select case
+    when propios is null or ajenos is null then 0
+    when propios > ajenos then 3
+    when propios = ajenos then 1
+    else 0
+  end::numeric;
+$$;
+
+-- Ranking de la temporada. Lo ve todo el club, así que sale del plantel
+-- público: sin PIN y sin handicap interno.
+--
+-- Las prácticas cuentan desde que se publican; los puntos, recién cuando se
+-- carga el resultado. En las de 12 cada jugador disputa dos de los tres
+-- enfrentamientos, así que valen la mitad y el máximo sigue siendo 3 por
+-- práctica. El bicolor juega para los dos equipos: se lleva el promedio.
 drop view if exists v_participacion;
 create view v_participacion with (security_invoker = false) as
+with jugadas as (
+  select p.temporada_id, pj.jugador_id,
+         count(*)                                                as practicas,
+         sum(p.chukkers - coalesce(array_length(pj.sale, 1), 0)) as chukkers
+  from practica_jugador pj
+  join practica p on p.id = pj.practica_id
+  group by p.temporada_id, pj.jugador_id
+),
+puntos as (
+  select p.temporada_id, pj.jugador_id,
+         sum(
+           (case when p.formato = 12 then 0.5 else 1 end)
+           * (case
+                when pj.equipo = 'bicolor'
+                  then (puntos_de(pp.goles_a, pp.goles_b) + puntos_de(pp.goles_b, pp.goles_a)) / 2
+                when pj.equipo = pp.equipo_a then puntos_de(pp.goles_a, pp.goles_b)
+                when pj.equipo = pp.equipo_b then puntos_de(pp.goles_b, pp.goles_a)
+                else 0   -- el equipo que descansaba esa franja
+              end)
+         ) as puntos
+  from practica_partido pp
+  join practica p on p.id = pp.practica_id
+  join practica_jugador pj on pj.practica_id = pp.practica_id
+  where pp.goles_a is not null
+  group by p.temporada_id, pj.jugador_id
+),
+mvps as (
+  select temporada_id, mvp_id as jugador_id, count(*) as mvps
+  from practica where mvp_id is not null
+  group by temporada_id, mvp_id
+)
 select
-  p.temporada_id,
+  ju.temporada_id,
   j.id as jugador_id,
   j.nombre,
   j.apodo,
   j.handicap,
   j.categoria,
-  count(*)                              as practicas,
-  sum(p.chukkers - coalesce(array_length(pj.sale, 1), 0)) as chukkers
-from practica_jugador pj
-join practica p on p.id = pj.practica_id
-join jugador  j on j.id = pj.jugador_id
-where p.estado = 'cerrada'
-group by p.temporada_id, j.id;
+  ju.practicas,
+  ju.chukkers,
+  coalesce(pt.puntos, 0) as puntos,
+  coalesce(mv.mvps, 0)   as mvps
+from jugadas ju
+join jugador j on j.id = ju.jugador_id
+left join puntos pt on pt.temporada_id = ju.temporada_id and pt.jugador_id = ju.jugador_id
+left join mvps   mv on mv.temporada_id = ju.temporada_id and mv.jugador_id = ju.jugador_id;
 
 -- Carga de trabajo por caballo: es el dato que hoy el club no tiene. Cuenta
 -- prácticas y partidos de torneo juntos, que es como los siente el caballo.
@@ -290,7 +352,7 @@ alter table jugador           enable row level security;
 alter table caballo           enable row level security;
 alter table practica          enable row level security;
 alter table practica_jugador  enable row level security;
-alter table practica_resultado enable row level security;
+alter table practica_partido  enable row level security;
 alter table jornada           enable row level security;
 alter table jornada_chukker   enable row level security;
 alter table jornada_puntaje   enable row level security;
@@ -325,8 +387,8 @@ drop policy if exists leer_practicas on practica;
 create policy leer_practicas on practica         for select using (true);
 drop policy if exists leer_planilla on practica_jugador;
 create policy leer_planilla on practica_jugador for select using (true);
-drop policy if exists leer_resultados on practica_resultado;
-create policy leer_resultados on practica_resultado for select using (true);
+drop policy if exists leer_resultados on practica_partido;
+create policy leer_resultados on practica_partido for select using (true);
 drop policy if exists leer_caballos on caballo;
 create policy leer_caballos on caballo          for select using (true);
 -- Cada uno maneja su propia caballada y su propia carga. Los caballos de otro
@@ -361,8 +423,8 @@ drop policy if exists admin_practicas on practica;
 create policy admin_practicas on practica          for all using (es_admin()) with check (es_admin());
 drop policy if exists admin_planilla on practica_jugador;
 create policy admin_planilla on practica_jugador  for all using (es_admin()) with check (es_admin());
-drop policy if exists admin_resultados on practica_resultado;
-create policy admin_resultados on practica_resultado for all using (es_admin()) with check (es_admin());
+drop policy if exists admin_resultados on practica_partido;
+create policy admin_resultados on practica_partido for all using (es_admin()) with check (es_admin());
 drop policy if exists admin_jugadores on jugador;
 create policy admin_jugadores on jugador           for all using (es_admin()) with check (es_admin());
 drop policy if exists admin_temporadas on temporada;
