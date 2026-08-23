@@ -241,13 +241,13 @@ function vistaArmar(raiz) {
 
   if (armado.planilla) {
     raiz.appendChild(el('h2', {}, [armado.guardada ? 'Publicada' : 'Así queda']));
-    raiz.appendChild(panelPlanilla(armado.planilla, armado.cabecera, !armado.guardada));
+    raiz.appendChild(panelPlanilla(armado.planilla, armado.cabecera, !armado.guardada, !!armado.guardada));
   }
 }
 
 /* ----------------------------------------------------------- la planilla */
 
-function panelPlanilla(planilla, cabecera, sinPublicar) {
+function panelPlanilla(planilla, cabecera, sinPublicar, recienGuardada) {
   const caja = el('div', { class: 'card p' });
 
   caja.appendChild(el('div', { class: 'cabecera-hoja' }, [
@@ -318,7 +318,7 @@ function panelPlanilla(planilla, cabecera, sinPublicar) {
   }, ['Copiar en texto']));
   caja.appendChild(acciones);
 
-  if (!sinPublicar) {
+  if (recienGuardada) {
     caja.appendChild(aviso('ok', 'Quedó guardada. Ya la podés mandar al grupo.'));
   }
 
@@ -526,6 +526,9 @@ function vistaPracticas(raiz) {
       class: 'link', type: 'button',
       onclick: () => { practicas.abierta = null; practicas.borrando = false; render(); },
     }, ['‹ Volver a la lista']));
+    const marcador = panelMarcador(practicas.abierta);
+    if (marcador) raiz.appendChild(marcador);
+
     raiz.appendChild(panelPlanilla(planilla, {
       fecha: practica.fecha.slice(0, 10),
       hora: String(practica.hora).slice(0, 5),
@@ -536,8 +539,6 @@ function vistaPracticas(raiz) {
       mvp: practicas.abierta.mvp ? practicas.abierta.mvp.apodo : null,
     }, false));
 
-    const marcador = panelMarcador(practicas.abierta);
-    if (marcador) raiz.appendChild(marcador);
     if (estado.jugador.admin) raiz.appendChild(panelCargarResultado(practicas.abierta));
 
     if (practicas.error) raiz.appendChild(aviso('mal', practicas.error));
