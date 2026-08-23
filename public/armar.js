@@ -531,6 +531,9 @@ function vistaPracticas(raiz) {
       hora: String(practica.hora).slice(0, 5),
       cancha: practica.cancha,
       notas: practica.notas || '',
+      // Lo que hace que la planilla exportada salga con el marcador y el MVP.
+      partidos: practicas.abierta.partidos,
+      mvp: practicas.abierta.mvp ? practicas.abierta.mvp.apodo : null,
     }, false));
 
     const marcador = panelMarcador(practicas.abierta);
@@ -651,11 +654,26 @@ function vistaPlantel(raiz) {
 
 /* ----------------------------------------------------------------- marco */
 
+/* Las pestañas, con su ícono como en la v1. Son varias: se deslizan. */
+const PESTANAS_ADMIN = [
+  ['armar', '🏇 Armar'], ['practicas', '📋 Prácticas'], ['ranking', '🏆 Ranking'],
+  ['jugador', '👤 Jugador'], ['canchas', '🏟️ Canchas'], ['caballos', '🐴 Caballos'],
+  ['plantel', '👥 Plantel'],
+];
+const PESTANAS_JUGADOR = [
+  ['practicas', '📋 Prácticas'], ['ranking', '🏆 Ranking'], ['jugador', '👤 Jugador'],
+  ['canchas', '🏟️ Canchas'], ['caballos', '🐴 Caballos'],
+];
+
+/** Lo que cada solapa necesita traído, la primera vez que se la mira. */
+function alEntrarA(id) {
+  if (id === 'ranking' && (!ranking.lista || rankingSucio)) cargarRanking();
+  if (id === 'jugador' && (!miFicha.datos || rankingSucio)) abrirJugador(estado.jugador.id, 'mi');
+  if (id === 'canchas' && !canchas.datos) cargarCanchas();
+}
+
 function pestanas() {
-  const cuales = estado.jugador.admin
-    ? [['armar', 'Armar'], ['practicas', 'Prácticas'], ['ranking', 'Ranking'],
-      ['caballos', 'Mis caballos'], ['plantel', 'Plantel']]
-    : [['practicas', 'Prácticas'], ['ranking', 'Ranking'], ['caballos', 'Mis caballos']];
+  const cuales = estado.jugador.admin ? PESTANAS_ADMIN : PESTANAS_JUGADOR;
 
   return el('nav', { class: 'pestanas' }, cuales.map(([id, texto]) =>
     el('button', {
@@ -664,8 +682,7 @@ function pestanas() {
         // Al salir de la carga de caballos se guarda lo que quedó pendiente.
         if (estado.vista === 'caballos' && id !== 'caballos') guardarAhora();
         estado.vista = id;
-        // El ranking se trae recién cuando se lo mira, y de nuevo si algo cambió.
-        if (id === 'ranking' && (!ranking.lista || rankingSucio)) cargarRanking();
+        alEntrarA(id);
         render();
       },
     }, [texto])));
@@ -682,6 +699,8 @@ function render() {
   else if (estado.vista === 'plantel' && estado.jugador.admin) vistaPlantel(raiz);
   else if (estado.vista === 'caballos') vistaCaballos(raiz);
   else if (estado.vista === 'ranking') vistaRanking(raiz);
+  else if (estado.vista === 'jugador') vistaJugador(raiz);
+  else if (estado.vista === 'canchas') vistaCanchas(raiz);
   else vistaPracticas(raiz);
 
   app.appendChild(el('div', { class: 'salir' }, [

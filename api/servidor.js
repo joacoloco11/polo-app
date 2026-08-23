@@ -35,6 +35,7 @@ const RUTAS = {
   resultado: require('../lib/rutas/resultado'),
   ranking: require('../lib/rutas/ranking'),
   jugador: require('../lib/rutas/jugador'),
+  canchas: require('../lib/rutas/canchas'),
 };
 
 /**

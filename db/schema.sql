@@ -186,6 +186,27 @@ create table if not exists practica_partido (
 -- Nunca llegó a usarse.
 drop table if exists practica_resultado;
 
+-- ------------------------------------------------------------------- torneos
+--
+-- Los partidos de torneo del club —Copa San Diego, fechas de la AAP— que no se
+-- arman con la app pero sí ocupan cancha. Se cargan a mano y son los que en la
+-- solapa Canchas aparecen como "partidos", al lado de las prácticas.
+
+create table if not exists torneo (
+  id           uuid primary key default gen_random_uuid(),
+  temporada_id uuid not null references temporada (id) on delete restrict,
+  nombre       text not null,                    -- 'Copa San Diego'
+  tipo         tipo_practica not null default 'copa' check (tipo <> 'practica'),
+  fecha        date not null,
+  hora         time,
+  cancha       smallint not null check (cancha between 1 and 6),
+  jugadores    smallint check (jugadores between 0 and 24),
+  creado_por   uuid references jugador (id) on delete set null,
+  creado_en    timestamptz not null default now()
+);
+
+create index if not exists torneo_temporada_fecha_idx on torneo (temporada_id, fecha desc);
+
 -- ------------------------------------------------------------------ jornadas
 --
 -- Una jornada es un día de caballos de UN jugador. Hay de dos clases y se
@@ -353,6 +374,7 @@ alter table caballo           enable row level security;
 alter table practica          enable row level security;
 alter table practica_jugador  enable row level security;
 alter table practica_partido  enable row level security;
+alter table torneo            enable row level security;
 alter table jornada           enable row level security;
 alter table jornada_chukker   enable row level security;
 alter table jornada_puntaje   enable row level security;
@@ -389,6 +411,11 @@ drop policy if exists leer_planilla on practica_jugador;
 create policy leer_planilla on practica_jugador for select using (true);
 drop policy if exists leer_resultados on practica_partido;
 create policy leer_resultados on practica_partido for select using (true);
+drop policy if exists leer_torneos on torneo;
+create policy leer_torneos on torneo            for select using (true);
+drop policy if exists admin_torneos on torneo;
+create policy admin_torneos on torneo for all using (es_admin()) with check (es_admin());
+
 drop policy if exists leer_caballos on caballo;
 create policy leer_caballos on caballo          for select using (true);
 -- Cada uno maneja su propia caballada y su propia carga. Los caballos de otro

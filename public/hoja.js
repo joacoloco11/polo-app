@@ -112,6 +112,14 @@ window.Hoja = (function () {
     }
     ctx.stroke();
 
+    // Los goles de cada equipo, si ya se cargó el resultado. En las de 12 son
+    // tres partidos, así que el marcador va abajo con cada franja.
+    const partidos = (cabecera.partidos || []).filter((p) => p.golesA !== null && p.golesA !== undefined);
+    const golesDe = {};
+    if (planilla.cantidad !== 12) {
+      partidos.forEach((p) => { golesDe[p.equipoA] = p.golesA; golesDe[p.equipoB] = p.golesB; });
+    }
+
     equipos.forEach((equipo, i) => {
       const x = margen + colAncho * i;
       const padding = 26;
@@ -119,6 +127,15 @@ window.Hoja = (function () {
       ctx.fillStyle = IMPRESO[equipo];
       ctx.font = fuente(38, 'bold');
       ctx.fillText(LABEL[equipo], x + padding, tablaY + 46);
+
+      // El marcador al lado del color, como lo escribe el club.
+      if (golesDe[equipo] !== undefined) {
+        ctx.font = fuente(44, 'bold');
+        ctx.fillStyle = TINTA.negro;
+        ctx.textAlign = 'right';
+        ctx.fillText(String(golesDe[equipo]), x + colAncho - padding, tablaY + 48);
+        ctx.textAlign = 'left';
+      }
 
       planilla.jugadores.filter((j) => j.color === equipo).forEach((j, fila) => {
         const filaY = tablaY + altoCabecera + altoFila * fila + 48;
@@ -157,25 +174,43 @@ window.Hoja = (function () {
       y += alto + 44;
     }
 
-    // ---- las franjas de las de 12
+    // ---- las franjas de las de 12, con su marcador si ya está cargado
     if (planilla.franjas) {
       ctx.font = fuente(34);
-      planilla.franjas.forEach((f) => {
+      planilla.franjas.forEach((f, i) => {
+        const partido = (cabecera.partidos || []).find((p) => p.orden === i + 1);
+        const conGoles = partido && partido.golesA !== null && partido.golesA !== undefined;
+
         ctx.fillStyle = TINTA.negro;
         const etiqueta = 'Chukkers ' + f.desde + ' a ' + f.hasta + ':  ';
         ctx.fillText(etiqueta, margen, y);
-        const x = margen + ctx.measureText(etiqueta).width;
-        const uno = LABEL[f.juegan[0]];
-        ctx.fillStyle = IMPRESO[f.juegan[0]];
-        ctx.fillText(uno, x, y);
-        const x2 = x + ctx.measureText(uno).width;
-        ctx.fillStyle = TINTA.negro;
-        ctx.fillText('  vs  ', x2, y);
-        ctx.fillStyle = IMPRESO[f.juegan[1]];
-        ctx.fillText(LABEL[f.juegan[1]], x2 + ctx.measureText('  vs  ').width, y);
+        let x = margen + ctx.measureText(etiqueta).width;
+
+        const escribir = (texto, color) => {
+          ctx.fillStyle = color;
+          ctx.fillText(texto, x, y);
+          x += ctx.measureText(texto).width;
+        };
+
+        escribir(LABEL[f.juegan[0]], IMPRESO[f.juegan[0]]);
+        if (conGoles) escribir('  ' + partido.golesA, TINTA.negro);
+        escribir('  vs  ', TINTA.negro);
+        escribir(LABEL[f.juegan[1]], IMPRESO[f.juegan[1]]);
+        if (conGoles) escribir('  ' + partido.golesB, TINTA.negro);
         y += 48;
       });
       y += 12;
+    }
+
+    // ---- el MVP, abajo de la lista
+    if (cabecera.mvp) {
+      ctx.font = fuente(34, 'bold');
+      ctx.fillStyle = TINTA.negro;
+      const etiqueta = 'MVP:  ';
+      ctx.fillText(etiqueta, margen, y);
+      ctx.font = fuente(34);
+      ctx.fillText(cabecera.mvp, margen + ctx.measureText(etiqueta).width, y);
+      y += 56;
     }
 
     // ---- la nota del organizador, en su recuadro
@@ -245,6 +280,10 @@ window.Hoja = (function () {
     return [
       cabecera.fecha, cabecera.cancha, cabecera.hora, cabecera.notas, planilla.cantidad,
       planilla.jugadores.map((j) => j.id + ':' + j.color).join(','),
+      // El resultado y el MVP cambian el dibujo: si no entran acá, la imagen
+      // guardada se queda con el marcador viejo.
+      (cabecera.partidos || []).map((p) => p.orden + ':' + p.golesA + '-' + p.golesB).join(','),
+      cabecera.mvp || '',
     ].join('|');
   }
 
@@ -323,8 +362,14 @@ window.Hoja = (function () {
     lineas.push(fechaCorta(cabecera.fecha) + ' · Cancha ' + cabecera.cancha
       + ' · ' + cabecera.hora + ' hs · ' + planilla.chukkers + ' chukkers');
     lineas.push('');
+    const partidos = (cabecera.partidos || []).filter((p) => p.golesA !== null && p.golesA !== undefined);
+    const golesDe = {};
+    if (planilla.cantidad !== 12) {
+      partidos.forEach((p) => { golesDe[p.equipoA] = p.golesA; golesDe[p.equipoB] = p.golesB; });
+    }
+
     planilla.equipos.forEach((equipo) => {
-      lineas.push(LABEL[equipo]);
+      lineas.push(LABEL[equipo] + (golesDe[equipo] !== undefined ? '  ' + golesDe[equipo] : ''));
       planilla.jugadores.filter((j) => j.color === equipo).forEach((j) => {
         lineas.push('  ' + j.apodo + (j.nota ? '  ' + j.nota : ''));
       });
@@ -337,10 +382,17 @@ window.Hoja = (function () {
       lineas.push('');
     }
     if (planilla.franjas) {
-      planilla.franjas.forEach((f) => {
+      planilla.franjas.forEach((f, i) => {
+        const p = (cabecera.partidos || []).find((x) => x.orden === i + 1);
+        const con = p && p.golesA !== null && p.golesA !== undefined;
         lineas.push('Chukkers ' + f.desde + ' a ' + f.hasta + ': '
-          + LABEL[f.juegan[0]] + ' vs ' + LABEL[f.juegan[1]]);
+          + LABEL[f.juegan[0]] + (con ? ' ' + p.golesA : '')
+          + ' vs ' + LABEL[f.juegan[1]] + (con ? ' ' + p.golesB : ''));
       });
+      lineas.push('');
+    }
+    if (cabecera.mvp) {
+      lineas.push('MVP: ' + cabecera.mvp);
       lineas.push('');
     }
     if (String(cabecera.notas || '').trim()) {

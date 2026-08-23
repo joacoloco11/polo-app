@@ -25,7 +25,8 @@ const server = http.createServer(async (req, res) => {
 
   const archivo = path.join(__dirname, 'public', url.pathname === '/' ? 'index.html' : url.pathname);
   if (fs.existsSync(archivo) && fs.statSync(archivo).isFile()) {
-    const tipos = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+    const tipos = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
+                    '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg' };
     res.setHeader('Content-Type', (tipos[path.extname(archivo)] || 'text/plain') + '; charset=utf-8');
     return res.end(fs.readFileSync(archivo));
   }

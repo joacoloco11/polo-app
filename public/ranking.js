@@ -1,25 +1,60 @@
 /* ===========================================================================
-   El ranking de la temporada y la ficha de cada jugador.
+   Ranking, la ficha del jugador y las canchas.
 
    El ranking se ordena por prácticas, después por puntos y después por MVP —
    ese es el criterio del club—, y se puede tocar el encabezado para ordenar
    por cualquiera de los tres.
 
-   La ficha rearma lo que mostraba la v1: con quién jugó más, en qué canchas y
-   el historial completo. Las cuentas se hacen acá con las prácticas que manda
-   el servidor, igual que antes.
+   La ficha es la misma pantalla en dos lugares: en la solapa "Jugador" cada
+   uno ve la suya, y desde el ranking un administrador puede abrir la de
+   cualquiera. Un jugador común solo llega a la propia.
+
+   Las canchas replican la vista de la v1 —cuánto se usó cada una— sumándole
+   los partidos de torneo, que carga un administrador porque no salen de la app.
    =========================================================================== */
 
 const ranking = {
   lista: null,
   temporada: null,
   orden: 'practicas',   // practicas | puntos | mvps
-  abierta: null,        // la ficha de un jugador
+  abierta: null,        // la ficha que se abrió desde el ranking
   error: null,
+};
+
+const miFicha = { datos: null, error: null };
+
+const canchas = {
+  datos: null,
+  error: null,
+  alta: false,
+  nuevo: { nombre: '', tipo: 'copa', fecha: hoy(), hora: '11:00', cancha: 1, jugadores: '' },
 };
 
 /** Cuando se carga un resultado, lo que está en pantalla queda viejo. */
 let rankingSucio = false;
+
+const COLOR_CATEGORIA = {
+  socio: 'var(--teal)',
+  temporario: '#3b82f6',
+  bonificado: 'var(--gold)',
+  invitado: '#a855f7',
+};
+
+const MEDALLA = ['🥇', '🥈', '🥉'];
+
+/** 3 en vez de 3,0 — pero 1,5 cuando hay medios. */
+const puntos = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(1).replace('.', ','));
+
+const conMayuscula = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1);
+
+function insignia(texto, color) {
+  return el('span', {
+    class: 'insignia',
+    style: 'background:' + color + '22;color:' + color,
+  }, [texto]);
+}
+
+/* ------------------------------------------------------------- el ranking */
 
 async function cargarRanking() {
   try {
@@ -34,23 +69,25 @@ async function cargarRanking() {
   render();
 }
 
-async function abrirJugador(id) {
+async function abrirJugador(id, donde) {
   try {
-    ranking.abierta = await pedir('/api/jugador?id=' + encodeURIComponent(id));
-    ranking.error = null;
+    const datos = await pedir('/api/jugador?id=' + encodeURIComponent(id));
+    if (donde === 'mi') { miFicha.datos = datos; miFicha.error = null; }
+    else { ranking.abierta = datos; ranking.error = null; }
   } catch (e) {
-    ranking.error = e.message;
+    if (donde === 'mi') miFicha.error = e.message;
+    else ranking.error = e.message;
   }
   render();
 }
 
-/** 3 en vez de 3,0 — pero 1,5 cuando hay medios. */
-const puntos = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(1).replace('.', ','));
-
-/* ------------------------------------------------------------- la lista */
-
 function vistaRanking(raiz) {
-  if (ranking.abierta) return fichaDeJugador(raiz);
+  if (ranking.abierta) {
+    return dibujarFicha(raiz, ranking.abierta, {
+      texto: '‹ Volver al ranking',
+      volver: () => { ranking.abierta = null; render(); },
+    });
+  }
 
   raiz.appendChild(el('h2', {}, [
     ranking.temporada ? 'Ranking · ' + ranking.temporada.nombre : 'Ranking',
@@ -83,15 +120,23 @@ function vistaRanking(raiz) {
     || b[otros[1]] - a[otros[1]]
     || a.apodo.localeCompare(b.apodo));
 
+  // Un jugador común solo entra a su propia ficha; el resto del ranking lo ve
+  // pero no lo abre.
+  const puedeAbrir = (j) => estado.jugador.admin || j.jugador_id === estado.jugador.id;
+
   raiz.appendChild(el('div', { class: 'lista' }, ordenada.map((j, i) =>
-    el('button', {
-      type: 'button', class: 'quien fila-ranking',
-      onclick: () => abrirJugador(j.jugador_id),
+    el(puedeAbrir(j) ? 'button' : 'div', {
+      type: puedeAbrir(j) ? 'button' : null,
+      class: 'quien fila-ranking' + (puedeAbrir(j) ? '' : ' estatico'),
+      onclick: puedeAbrir(j) ? () => abrirJugador(j.jugador_id) : null,
     }, [
-      el('span', { class: 'puesto-nro' + (i < 3 ? ' podio' : '') }, [String(i + 1)]),
+      el('span', { class: 'puesto-nro' + (i < 3 ? ' podio' : '') }, [MEDALLA[i] || String(i + 1)]),
       el('span', { style: 'flex:1;min-width:0' }, [
         el('b', {}, [j.apodo]),
-        el('span', {}, [j.nombre]),
+        el('span', { class: 'meta' }, [
+          insignia(conMayuscula(j.categoria), COLOR_CATEGORIA[j.categoria] || 'var(--muted)'),
+          'HCP ' + hcp(j.handicap),
+        ]),
       ]),
       el('span', { class: 'num' + (orden === 'practicas' ? ' fuerte' : '') }, [String(j.practicas)]),
       el('span', { class: 'num' + (orden === 'puntos' ? ' fuerte' : '') }, [puntos(j.puntos)]),
@@ -104,22 +149,36 @@ function vistaRanking(raiz) {
   ]));
 }
 
+/* -------------------------------------------------------- la solapa Jugador */
+
+function vistaJugador(raiz) {
+  if (miFicha.error) { raiz.appendChild(aviso('mal', miFicha.error)); return; }
+  if (!miFicha.datos) {
+    raiz.appendChild(el('div', { class: 'vacio' }, ['Cargando…']));
+    return;
+  }
+  dibujarFicha(raiz, miFicha.datos, null);
+}
+
 /* -------------------------------------------------------------- la ficha */
 
-function fichaDeJugador(raiz) {
-  const { jugador, practicas: jugadas, resumen } = ranking.abierta;
+function dibujarFicha(raiz, datos, volver) {
+  const { jugador, practicas: jugadas, resumen } = datos;
 
-  raiz.appendChild(el('button', {
-    class: 'link', type: 'button',
-    onclick: () => { ranking.abierta = null; render(); },
-  }, ['‹ Volver al ranking']));
+  if (volver) {
+    raiz.appendChild(el('button', {
+      class: 'link', type: 'button', onclick: volver.volver,
+    }, [volver.texto]));
+  }
 
   raiz.appendChild(el('div', { class: 'card p ficha' }, [
     el('b', {}, [jugador.apodo]),
-    el('span', {}, [
-      jugador.nombre + ' · ' + jugador.categoria + ' · HCP ' + hcp(jugador.handicap)
-      + (jugador.invitado_por ? ' · invitado por ' + jugador.invitado_por : ''),
-    ]),
+    el('span', { class: 'meta' }, [
+      insignia(conMayuscula(jugador.categoria), COLOR_CATEGORIA[jugador.categoria] || 'var(--muted)'),
+      'HCP ' + hcp(jugador.handicap),
+      jugador.invitado_por ? 'invitado por ' + jugador.invitado_por : null,
+    ].filter(Boolean)),
+    el('span', {}, [jugador.nombre]),
   ]));
 
   /* ---- los números */
@@ -167,7 +226,7 @@ function fichaDeJugador(raiz) {
           el('em', {}, ['Compañero más frecuente']),
           el('b', {}, [companero[0]]),
         ]),
-        el('span', { class: 'marca listo' }, [companero[1] + 'x']),
+        insignia(companero[1] + 'x', 'var(--teal)'),
       ]));
     }
     if (compartido) {
@@ -176,16 +235,16 @@ function fichaDeJugador(raiz) {
           el('em', {}, ['Con quien más compartió cancha']),
           el('b', {}, [compartido[0]]),
         ]),
-        el('span', { class: 'marca' }, [compartido[1] + 'x']),
+        insignia(compartido[1] + 'x', 'var(--gold)'),
       ]));
     }
     raiz.appendChild(caja);
   }
 
   /* ---- canchas */
-  const canchas = {};
-  jugadas.forEach((p) => { canchas[p.cancha] = (canchas[p.cancha] || 0) + 1; });
-  const porCancha = Object.entries(canchas).sort((a, b) => b[1] - a[1]);
+  const suyas = {};
+  jugadas.forEach((p) => { suyas[p.cancha] = (suyas[p.cancha] || 0) + 1; });
+  const porCancha = Object.entries(suyas).sort((a, b) => b[1] - a[1]);
 
   if (porCancha.length) {
     raiz.appendChild(el('h2', {}, ['Canchas']));
@@ -197,14 +256,17 @@ function fichaDeJugador(raiz) {
       ]))));
   }
 
-  /* ---- historial */
+  /* ---- historial: cada práctica lleva a su planilla */
   raiz.appendChild(el('h2', {}, ['Historial (' + jugadas.length + ')']));
   raiz.appendChild(el('div', { class: 'lista' }, jugadas.map((p) => {
     const jugados = p.partidos.filter((x) =>
       x.golesA !== null && (x.equipoA === p.miEquipo || x.equipoB === p.miEquipo || p.miEquipo === 'bicolor'));
     const marcador = jugados.map((x) => x.golesA + '-' + x.golesB).join(' · ');
 
-    return el('div', { class: 'quien estatico' }, [
+    return el('button', {
+      type: 'button', class: 'quien',
+      onclick: () => irALaPlanilla(p.id),
+    }, [
       el('span', { style: 'flex:1;min-width:0' }, [
         el('b', {}, [Hoja.fechaCorta(p.fecha)]),
         el('span', {}, [
@@ -213,8 +275,158 @@ function fichaDeJugador(raiz) {
           + (marcador ? ' · ' + marcador : ''),
         ]),
       ]),
-      p.mvpId === jugador.id ? el('span', { class: 'marca' }, ['MVP']) : null,
+      p.mvpId === jugador.id ? insignia('MVP', 'var(--gold)') : null,
       el('span', { class: 'sello ' + p.miEquipo }, [Hoja.LABEL[p.miEquipo]]),
     ]);
   })));
+}
+
+/** Desde la ficha se salta a la planilla de esa práctica. */
+function irALaPlanilla(id) {
+  estado.vista = 'practicas';
+  abrirPractica(id);
+}
+
+/* ------------------------------------------------------------- las canchas */
+
+async function cargarCanchas() {
+  try {
+    canchas.datos = await pedir('/api/canchas');
+    canchas.error = null;
+  } catch (e) {
+    canchas.error = e.message;
+  }
+  render();
+}
+
+function vistaCanchas(raiz) {
+  raiz.appendChild(el('h2', {}, ['Canchas']));
+
+  if (canchas.error) raiz.appendChild(aviso('mal', canchas.error));
+  if (!canchas.datos) {
+    raiz.appendChild(el('div', { class: 'vacio' }, ['Cargando…']));
+    return;
+  }
+
+  const { canchas: uso, torneos } = canchas.datos;
+
+  if (!uso.length) {
+    raiz.appendChild(el('div', { class: 'vacio' }, ['Todavía no se jugó en ninguna cancha.']));
+  }
+
+  uso.forEach((c) => {
+    raiz.appendChild(el('div', { class: 'card cancha-fila' }, [
+      el('div', { class: 'redondel' }, [String(c.cancha)]),
+      el('div', { style: 'flex:1;min-width:0' }, [
+        el('b', {}, ['Cancha ' + c.cancha]),
+        el('div', { class: 'insignias' }, [
+          c.practicas ? insignia(c.practicas + (c.practicas === 1 ? ' práctica' : ' prácticas'), '#3b82f6') : null,
+          c.partidos ? insignia(c.partidos + (c.partidos === 1 ? ' partido' : ' partidos'), 'var(--gold)') : null,
+        ].filter(Boolean)),
+      ]),
+      el('div', { style: 'text-align:right' }, [
+        el('b', { class: 'grande' }, [String(c.total)]),
+        el('em', {}, ['total']),
+        c.promedio_jugadores
+          ? el('div', { class: 'chico' }, ['prom. ' + String(c.promedio_jugadores).replace('.', ',') + ' jug.'])
+          : null,
+      ]),
+    ]));
+  });
+
+  /* ---- los partidos de torneo */
+  raiz.appendChild(el('h2', {}, ['Partidos de torneo']));
+
+  if (!torneos.length) {
+    raiz.appendChild(el('div', { class: 'vacio' }, [
+      estado.jugador.admin
+        ? 'Todavía no cargaste ninguno. Sumá los de copa y los de la AAP para que cuenten en las canchas.'
+        : 'Todavía no hay partidos de torneo cargados.',
+    ]));
+  }
+
+  raiz.appendChild(el('div', { class: 'lista' }, torneos.map((t) =>
+    el('div', { class: 'quien estatico' }, [
+      el('span', { style: 'flex:1;min-width:0' }, [
+        el('b', {}, [t.nombre]),
+        el('span', {}, [
+          Hoja.fechaCorta(t.fecha) + ' · Cancha ' + t.cancha
+          + (t.hora ? ' · ' + t.hora + ' hs' : '')
+          + (t.jugadores ? ' · ' + t.jugadores + ' jug.' : ''),
+        ]),
+      ]),
+      insignia(t.tipo === 'aap' ? 'AAP' : 'COPA', t.tipo === 'aap' ? '#a855f7' : 'var(--gold)'),
+      estado.jugador.admin
+        ? el('button', {
+          class: 'sacar', type: 'button', 'aria-label': 'Borrar ' + t.nombre,
+          onclick: (e) => conBoton(e.target, async () => {
+            await pedir('/api/canchas?id=' + encodeURIComponent(t.id), { method: 'DELETE' });
+            await cargarCanchas();
+          }, canchas),
+        }, ['×'])
+        : null,
+    ]))));
+
+  if (estado.jugador.admin) raiz.appendChild(altaDeTorneoDelClub());
+}
+
+function altaDeTorneoDelClub() {
+  if (!canchas.alta) {
+    return el('div', { style: 'margin-top:18px' }, [
+      el('button', {
+        class: 'primary', type: 'button',
+        onclick: () => { canchas.alta = true; render(); },
+      }, ['Sumar un partido de torneo']),
+    ]);
+  }
+
+  const nuevo = canchas.nuevo;
+  const campo = (etiqueta, control) =>
+    el('label', { class: 'campo' }, [el('span', {}, [etiqueta]), control]);
+
+  return el('div', { class: 'card p', style: 'margin-top:18px' }, [
+    campo('Torneo', el('input', {
+      type: 'text', value: nuevo.nombre, placeholder: 'Copa San Diego',
+      oninput: (e) => { nuevo.nombre = e.target.value; },
+    })),
+    campo('Qué es', el('div', { class: 'chips' }, [['copa', 'Copa'], ['aap', 'AAP']].map(([clave, texto]) =>
+      el('button', {
+        type: 'button', class: 'chip', 'aria-pressed': nuevo.tipo === clave,
+        onclick: () => { nuevo.tipo = clave; render(); },
+      }, [texto])))),
+    el('div', { class: 'grilla-2' }, [
+      campo('Fecha', el('input', {
+        type: 'date', value: nuevo.fecha,
+        onchange: (e) => { nuevo.fecha = e.target.value; },
+      })),
+      campo('Hora', el('input', {
+        type: 'time', value: nuevo.hora,
+        onchange: (e) => { nuevo.hora = e.target.value; },
+      })),
+    ]),
+    campo('Cancha', el('div', { class: 'chips' }, [1, 2, 3, 4, 5, 6].map((n) =>
+      el('button', {
+        type: 'button', class: 'chip', 'aria-pressed': nuevo.cancha === n,
+        onclick: () => { nuevo.cancha = n; render(); },
+      }, [String(n)])))),
+    campo('Cuántos jugaron (opcional)', el('input', {
+      type: 'number', min: 0, max: 24, value: nuevo.jugadores,
+      oninput: (e) => { nuevo.jugadores = e.target.value; },
+    })),
+    el('div', { class: 'acciones' }, [
+      el('button', {
+        class: 'primary', type: 'button',
+        onclick: (e) => conBoton(e.target, async () => {
+          await pedir('/api/canchas', { method: 'POST', body: JSON.stringify(nuevo) });
+          canchas.alta = false;
+          canchas.nuevo = { nombre: '', tipo: 'copa', fecha: hoy(), hora: '11:00', cancha: 1, jugadores: '' };
+          await cargarCanchas();
+        }, canchas),
+      }, ['Guardar el partido']),
+      el('button', {
+        class: 'link', type: 'button',
+        onclick: () => { canchas.alta = false; render(); },
+      }, ['Cancelar']),
+    ]),
+  ]);
 }

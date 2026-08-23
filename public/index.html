@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0e1a">
 <title>San Diego Polo</title>
+<!-- Para que agregada a la pantalla de inicio quede como una app: con el
+     escudo, a pantalla completa y sin la barra del navegador. -->
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/iconos/logo-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="/iconos/logo-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="San Diego">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;700&display=swap">
 <style>
   :root {
@@ -39,16 +47,19 @@
   }
   .head-in { max-width: 640px; margin: 0 auto; padding: 13px 14px; display: flex; align-items: center; gap: 11px; }
   .mark {
-    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
-    background: linear-gradient(135deg, var(--teal), #008f7a);
-    display: flex; align-items: center; justify-content: center; color: #03130f;
+    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+    background: #fff; object-fit: cover;
   }
   .brand { flex: 1; }
   .brand b { display: block; color: var(--teal); letter-spacing: 1.5px; font-size: 16px; }
   .brand span { display: block; color: var(--muted); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
 
-  h2 { font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 24px 0 10px; }
+  /* Los títulos de sección, dorados y en tamaño de lectura, como en la v1. */
+  h2 { font-size: 17px; letter-spacing: 1px; color: var(--gold); font-weight: 400; margin: 24px 0 12px; }
   h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: 1.6px; }
+
+  .insignia { font-size: 11px; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+  .meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
   .card.p { padding: 14px; }
@@ -261,8 +272,22 @@
   .fila-ranking .num { width: 46px; text-align: center; font-size: 13px; color: var(--muted); flex-shrink: 0; }
   .fila-ranking .num.fuerte { color: var(--teal); font-weight: 700; font-size: 16px; }
 
-  .ficha b { display: block; font-size: 18px; color: var(--teal); }
-  .ficha span { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .ficha { border-color: var(--teal); }
+  .ficha b { display: block; font-size: 19px; color: var(--teal); }
+  .ficha > span { display: block; font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+  /* Canchas, con el redondel del número como en la v1. */
+  .cancha-fila { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 8px; }
+  .cancha-fila b { font-size: 16px; }
+  .redondel {
+    width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; font-size: 20px; font-weight: 700;
+    background: linear-gradient(135deg, var(--teal), #008f7a); color: #03130f;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .insignias { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .cancha-fila .grande { font-size: 22px; font-weight: 700; color: var(--teal); display: block; }
+  .cancha-fila em { font-style: normal; font-size: 11px; color: var(--muted); }
+  .cancha-fila .chico { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .renglon-dato { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
   .renglon-dato + .renglon-dato { border-top: 1px solid var(--line); }
   .renglon-dato em { display: block; font-style: normal; font-size: 10px; color: var(--muted); letter-spacing: 1px; }
@@ -291,9 +316,7 @@
 
 <header>
   <div class="head-in">
-    <div class="mark" aria-hidden="true">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20v-8a5 5 0 0 1 10 0v8"/><path d="M5 20h4M15 20h4"/></svg>
-    </div>
+    <img class="mark" src="/iconos/logo-192.png" alt="Escudo del Club de Campo San Diego">
     <div class="brand"><b>SAN DIEGO</b><span id="subtitulo">Club de Campo</span></div>
     <div id="chip-admin"></div>
   </div>
