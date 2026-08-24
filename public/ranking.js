@@ -332,32 +332,52 @@ function vistaCanchas(raiz) {
     raiz.appendChild(el('div', { class: 'vacio' }, ['Todavía no se jugó en ninguna cancha.']));
   }
 
-  // Lo que mide una cancha es cuánto se jugó encima: los chukkers.
-  const totalChukkers = uso.reduce((a, c) => a + c.chukkers, 0);
-  const totalJornadas = uso.reduce((a, c) => a + c.total, 0);
-  if (uso.length) {
-    raiz.appendChild(el('div', { class: 'card p numeros' }, [
-      el('div', {}, [el('b', { class: 'teal' }, [String(totalChukkers)]), el('span', {}, ['chukkers en total'])]),
-      el('div', {}, [el('b', {}, [String(totalJornadas)]), el('span', {}, ['prácticas y partidos'])]),
-    ]));
-  }
-
-  uso.forEach((c) => {
-    raiz.appendChild(el('div', { class: 'card cancha-fila' }, [
-      el('div', { class: 'redondel' }, [String(c.cancha)]),
+  /**
+   * Cada cancha es un renglón igual, y la temporada entera es el mismo renglón
+   * arriba de todo: así se compara una cancha contra el total sin cambiar de
+   * forma de leer. El número grande son las veces que se usó —prácticas más
+   * partidos— y abajo, los chukkers que se jugaron encima.
+   */
+  const renglon = ({ marca, titulo, practicas, partidos, total, chukkers, destacado }) =>
+    el('div', { class: 'card cancha-fila' + (destacado ? ' total' : '') }, [
+      el('div', { class: 'redondel' + (destacado ? ' rotulo' : '') }, [marca]),
       el('div', { style: 'flex:1;min-width:0' }, [
-        el('b', {}, ['Cancha ' + c.cancha]),
+        el('b', {}, [titulo]),
         el('div', { class: 'insignias' }, [
-          c.practicas ? insignia(c.practicas + (c.practicas === 1 ? ' práctica' : ' prácticas'), 'var(--azul)') : null,
-          c.partidos ? insignia(c.partidos + (c.partidos === 1 ? ' partido' : ' partidos'), 'var(--gold)') : null,
+          practicas ? insignia(practicas + (practicas === 1 ? ' práctica' : ' prácticas'), 'var(--azul)') : null,
+          partidos ? insignia(partidos + (partidos === 1 ? ' partido' : ' partidos'), 'var(--gold)') : null,
         ].filter(Boolean)),
       ]),
       el('div', { style: 'text-align:right' }, [
-        el('b', { class: 'grande' }, [String(c.chukkers)]),
-        el('em', {}, ['chukkers']),
+        el('b', { class: 'grande' }, [String(total)]),
+        el('em', {}, ['total']),
+        el('div', { class: 'chico' }, [chukkers + ' chukkers']),
       ]),
-    ]));
-  });
+    ]);
+
+  if (uso.length) {
+    raiz.appendChild(renglon({
+      marca: 'TOTAL',
+      titulo: 'Total temporada',
+      practicas: uso.reduce((a, c) => a + c.practicas, 0),
+      partidos: uso.reduce((a, c) => a + c.partidos, 0),
+      total: uso.reduce((a, c) => a + c.total, 0),
+      chukkers: uso.reduce((a, c) => a + c.chukkers, 0),
+      destacado: true,
+    }));
+  }
+
+  // De la más usada a la menos: la pregunta es cuál se está gastando.
+  uso.slice()
+    .sort((a, b) => b.total - a.total || b.chukkers - a.chukkers || a.cancha - b.cancha)
+    .forEach((c) => raiz.appendChild(renglon({
+      marca: String(c.cancha),
+      titulo: 'Cancha ' + c.cancha,
+      practicas: c.practicas,
+      partidos: c.partidos,
+      total: c.total,
+      chukkers: c.chukkers,
+    })));
 
   /* ---- los partidos de torneo */
   raiz.appendChild(el('h2', {}, ['Partidos de torneo']));

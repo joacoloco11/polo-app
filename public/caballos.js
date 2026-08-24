@@ -777,12 +777,30 @@ const BORDE_VACIA = '#dde3ec';
 const COLOR_LESION = '#c62828';
 const TINTA_NOMBRE = '#16202e';
 const TINTA_EJE = '#6b7891';
+// La diagonal que marca el torneo. Blanca se despega de los verdes oscuros;
+// negra se lee mejor sobre los claros. Se cambia acá y cambia en los dos lados.
+const COLOR_DIAGONAL = '#ffffff';
 
 const escalon = (puntaje) => (puntaje >= 9 ? 3 : puntaje >= 7 ? 2 : puntaje >= 5 ? 1 : 0);
 
 const colorDeCelda = (celda) => (celda.chukkers <= 0 ? CELDA_VACIA
   : celda.puntaje ? RAMPA_PUNTAJE[escalon(celda.puntaje)]
     : SIN_PUNTAJE);
+
+/**
+ * Qué forma toma un cuadrito. La práctica es un cuadrado lleno; el torneo
+ * lleva una diagonal encima, y si ahí el caballo hizo nada más que medio
+ * chukker se llena solo el triángulo de abajo.
+ */
+function formaDeCelda(celda) {
+  const jugo = celda.chukkers > 0;
+  return {
+    jugo,
+    relleno: colorDeCelda(celda),
+    diagonal: jugo && celda.torneo,
+    medio: jugo && celda.torneo && celda.chukkers <= 0.5,
+  };
+}
 
 /**
  * El plano del calendario: qué filas, qué columnas y dónde va cada cosa.
@@ -814,6 +832,9 @@ function planoDelCalendario(stats, medidas) {
         fecha: ev.fecha,
         chukkers: lugares * pesoDe(ev),
         puntaje: ev.puntajes[s.caballo.id] || null,
+        // El torneo exige distinto que la práctica: el cuadrito lo dice con
+        // una diagonal, y si el caballo hizo medio chukker se llena la mitad.
+        torneo: ev.tipo === 'aap',
       };
     });
     const jugadas = celdas.map((c, i) => (c.chukkers > 0 ? i : -1)).filter((i) => i >= 0);
@@ -866,6 +887,32 @@ function tramosDeLesion(fila, eventos) {
   }).filter((t) => t.desde >= 0);
 }
 
+/** El cuadradito de torneo, para la referencia: entero o por la mitad. */
+function muestraDeTorneo(medio) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', 13);
+  svg.setAttribute('height', 13);
+  svg.setAttribute('viewBox', '0 0 14 14');
+  const poner = (tag, attrs) => {
+    const n = document.createElementNS(ns, tag);
+    Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, String(v)));
+    svg.appendChild(n);
+  };
+  if (medio) {
+    poner('rect', { x: 0.5, y: 0.5, width: 13, height: 13, rx: 3, fill: CELDA_VACIA, stroke: BORDE_VACIA });
+    poner('path', { d: 'M1 1 L1 13.5 L13 13.5 Z', fill: RAMPA_PUNTAJE[2] });
+    poner('rect', { x: 0.5, y: 0.5, width: 13, height: 13, rx: 3, fill: 'none', stroke: BORDE_VACIA });
+  } else {
+    poner('rect', { x: 0.5, y: 0.5, width: 13, height: 13, rx: 3, fill: RAMPA_PUNTAJE[2] });
+  }
+  poner('line', {
+    x1: 1.5, y1: 1.5, x2: 12.5, y2: 12.5,
+    stroke: COLOR_DIAGONAL, 'stroke-width': 1.5, 'stroke-linecap': 'round',
+  });
+  return svg;
+}
+
 /* ------------------------------------------------------------- en pantalla */
 
 const MEDIDAS = { etiqueta: 74, celda: 14, hueco: 4, angosta: 6, fila: 24, eje: 20 };
@@ -910,22 +957,42 @@ function grafico(raiz, stats) {
       if (fila.desde === -1 || c < fila.desde || c > fila.hasta) return;
       if (!conJuego[c]) return;
 
-      const jugo = celda.chukkers > 0;
-      const rect = nodo('rect', {
+      const f = formaDeCelda(celda);
+      const g = nodo('g', { class: 'celda' + (f.jugo ? ' clicable' : '') });
+      const marco = (relleno, borde) => nodo('rect', {
         x: x[c], y, width: M.celda, height: M.celda, rx: 3,
-        fill: colorDeCelda(celda),
-        stroke: jugo ? 'none' : BORDE_VACIA,
-        'stroke-width': jugo ? 0 : 1,
-        class: 'celda' + (jugo ? ' clicable' : ''),
+        fill: relleno, stroke: borde || 'none', 'stroke-width': borde ? 1 : 0,
       });
+
+      if (f.medio) {
+        // El cuadrado queda vacío y se llena solo el triángulo de abajo.
+        g.appendChild(marco(CELDA_VACIA, BORDE_VACIA));
+        g.appendChild(nodo('path', {
+          d: 'M' + x[c] + ' ' + (y + 1) + ' L' + x[c] + ' ' + (y + M.celda)
+            + ' L' + (x[c] + M.celda - 1) + ' ' + (y + M.celda) + ' Z',
+          fill: f.relleno,
+        }));
+        g.appendChild(marco('none', BORDE_VACIA));   // el borde, prolijo, encima
+      } else {
+        g.appendChild(marco(f.relleno, f.jugo ? null : BORDE_VACIA));
+      }
+
+      if (f.diagonal) {
+        g.appendChild(nodo('line', {
+          x1: x[c] + 1, y1: y + 1, x2: x[c] + M.celda - 1, y2: y + M.celda - 1,
+          stroke: COLOR_DIAGONAL, 'stroke-width': 1.5, 'stroke-linecap': 'round',
+        }));
+      }
+
       const detalle = fila.caballo.nombre + ' · ' + Hoja.fechaCorta(celda.fecha) + ' · '
-        + (jugo
+        + (f.jugo
           ? cantidad(celda.chukkers) + (celda.chukkers === 1 ? ' chukker' : ' chukkers')
+            + (celda.torneo ? ' de torneo' : '')
             + (celda.puntaje ? ' · puntaje ' + celda.puntaje : ' · sin puntaje')
           : 'no jugó');
-      rect.appendChild(nodo('title', {}, [])).textContent = detalle;
-      if (jugo) rect.addEventListener('click', () => { caballos.detalle = detalle; render(); });
-      svg.appendChild(rect);
+      g.appendChild(nodo('title', {}, [])).textContent = detalle;
+      if (f.jugo) g.addEventListener('click', () => { caballos.detalle = detalle; render(); });
+      svg.appendChild(g);
     });
 
     // La lesión cruza los cuadraditos por el medio, con un borde blanco para
@@ -994,6 +1061,11 @@ function grafico(raiz, stats) {
     llave(CELDA_VACIA, 'no jugó', BORDE_VACIA),
     llave(BORDE_VACIA, 'no salió ninguno', null, 'rayita'),
     llave(COLOR_LESION, 'lesionado', null, 'barra'),
+  ]));
+  raiz.appendChild(el('div', { class: 'referencia' }, [
+    el('span', { class: 'titulo-ref' }, ['Torneo']),
+    el('span', { class: 'llave' }, [muestraDeTorneo(false), 'chukker entero']),
+    el('span', { class: 'llave' }, [muestraDeTorneo(true), 'medio chukker']),
   ]));
 
   raiz.appendChild(el('div', { class: 'acciones' }, [
@@ -1129,14 +1201,49 @@ function calendarioEnCanvas(stats) {
     fila.celdas.forEach((celda, c) => {
       if (fila.desde === -1 || c < fila.desde || c > fila.hasta) return;
       if (!conJuego[c]) return;
-      const jugo = celda.chukkers > 0;
-      redondeado(ctx, x0 + x[c], y, M.celda, M.celda, 5);
-      ctx.fillStyle = colorDeCelda(celda);
-      ctx.fill();
-      if (!jugo) {
+
+      const f = formaDeCelda(celda);
+      const cx = x0 + x[c];
+
+      if (f.medio) {
+        // Vacío el cuadrado, lleno el triángulo de abajo y le repaso el borde.
+        redondeado(ctx, cx, y, M.celda, M.celda, 5);
+        ctx.fillStyle = CELDA_VACIA;
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        ctx.beginPath();
+        ctx.moveTo(cx, y);
+        ctx.lineTo(cx, y + M.celda);
+        ctx.lineTo(cx + M.celda, y + M.celda);
+        ctx.closePath();
+        ctx.fillStyle = f.relleno;
+        ctx.fill();
+        ctx.restore();
+        redondeado(ctx, cx, y, M.celda, M.celda, 5);
         ctx.strokeStyle = BORDE_VACIA;
         ctx.lineWidth = 2;
         ctx.stroke();
+      } else {
+        redondeado(ctx, cx, y, M.celda, M.celda, 5);
+        ctx.fillStyle = f.relleno;
+        ctx.fill();
+        if (!f.jugo) {
+          ctx.strokeStyle = BORDE_VACIA;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+
+      if (f.diagonal) {
+        ctx.beginPath();
+        ctx.moveTo(cx + 2, y + 2);
+        ctx.lineTo(cx + M.celda - 2, y + M.celda - 2);
+        ctx.strokeStyle = COLOR_DIAGONAL;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.lineCap = 'butt';
       }
     });
 
@@ -1204,6 +1311,8 @@ function referenciaEnCanvas(ctx, x, y, ancho) {
     { texto: 'no jugó', color: CELDA_VACIA, borde: BORDE_VACIA },
     { texto: 'no salió ninguno', color: BORDE_VACIA, forma: 'rayita' },
     { texto: 'lesionado', color: COLOR_LESION, forma: 'barra' },
+    { texto: 'torneo', color: RAMPA_PUNTAJE[2], forma: 'torneo' },
+    { texto: 'medio chukker', color: RAMPA_PUNTAJE[2], forma: 'medio' },
   ];
 
   ctx.font = Hoja.fuente(21);
@@ -1222,6 +1331,39 @@ function referenciaEnCanvas(ctx, x, y, ancho) {
       redondeado(ctx, cx, cy - 8, 22, 6, 3);
       ctx.fillStyle = llave.color;
       ctx.fill();
+    } else if (llave.forma === 'torneo' || llave.forma === 'medio') {
+      const t = cy - 17;
+      if (llave.forma === 'medio') {
+        redondeado(ctx, cx, t, 22, 22, 4);
+        ctx.fillStyle = CELDA_VACIA;
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        ctx.beginPath();
+        ctx.moveTo(cx, t);
+        ctx.lineTo(cx, t + 22);
+        ctx.lineTo(cx + 22, t + 22);
+        ctx.closePath();
+        ctx.fillStyle = llave.color;
+        ctx.fill();
+        ctx.restore();
+        redondeado(ctx, cx, t, 22, 22, 4);
+        ctx.strokeStyle = BORDE_VACIA;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        redondeado(ctx, cx, t, 22, 22, 4);
+        ctx.fillStyle = llave.color;
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.moveTo(cx + 2, t + 2);
+      ctx.lineTo(cx + 20, t + 20);
+      ctx.strokeStyle = COLOR_DIAGONAL;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.lineCap = 'butt';
     } else {
       redondeado(ctx, cx, cy - 17, 22, 22, 4);
       ctx.fillStyle = llave.color;
