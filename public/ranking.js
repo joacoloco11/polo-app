@@ -276,7 +276,14 @@ function dibujarFicha(raiz, datos, volver) {
   raiz.appendChild(el('div', { class: 'lista' }, jugadas.map((p) => {
     const jugados = p.partidos.filter((x) =>
       x.golesA !== null && (x.equipoA === p.miEquipo || x.equipoB === p.miEquipo || p.miEquipo === 'bicolor'));
-    const marcador = jugados.map((x) => x.golesA + '-' + x.golesB).join(' · ');
+
+    // Los goles van en el color del equipo que los metió, igual que en la
+    // lista de prácticas y en la planilla.
+    const detalle = [
+      'Cancha ' + p.cancha + ' · ' + p.formato + ' jug.'
+      + (p.hcpPractica === null ? '' : ' · HCP ' + puntos(p.hcpPractica)),
+    ];
+    jugados.forEach((x) => { detalle.push(' · ', ...golesEnColor(x)); });
 
     return el('button', {
       type: 'button', class: 'quien',
@@ -284,11 +291,7 @@ function dibujarFicha(raiz, datos, volver) {
     }, [
       el('span', { style: 'flex:1;min-width:0' }, [
         el('b', {}, [Hoja.fechaCorta(p.fecha)]),
-        el('span', {}, [
-          'Cancha ' + p.cancha + ' · ' + p.formato + ' jug.'
-          + (p.hcpPractica === null ? '' : ' · HCP ' + p.hcpPractica)
-          + (marcador ? ' · ' + marcador : ''),
-        ]),
+        el('span', {}, detalle),
       ]),
       p.mvpId === jugador.id ? insignia('MVP', 'var(--gold)') : null,
       el('span', { class: 'sello ' + p.miEquipo }, [Hoja.LABEL[p.miEquipo]]),

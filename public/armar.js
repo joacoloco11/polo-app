@@ -588,11 +588,8 @@ function tarjetaDePractica(p) {
         el('span', {}, ['Cancha ' + p.cancha + ' · ' + p.hora + ' hs · ' + p.formato + ' jugadores']),
       ]),
       marcadores.length
-        ? el('span', { class: 'marcadores' }, marcadores.map((x) => el('span', {}, [
-          el('b', { class: 'color ' + x.equipoA }, [String(x.golesA)]),
-          el('i', {}, ['–']),
-          el('b', { class: 'color ' + x.equipoB }, [String(x.golesB)]),
-        ])))
+        ? el('span', { class: 'marcadores' },
+          marcadores.map((x) => el('span', {}, golesEnColor(x))))
         : el('span', { class: 'marca pendiente' }, ['sin resultado']),
     ]),
 

@@ -316,6 +316,10 @@
   .marcadores { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; flex-shrink: 0; }
   .practica-cabecera .marcadores > span { display: flex; gap: 4px; align-items: baseline; font-size: 15px; white-space: nowrap; }
   .marcadores i { font-style: normal; color: var(--muted); font-size: 12px; }
+  .guion { font-style: normal; color: var(--muted); }
+  /* Los goles van adentro del renglón, no cada número en su propia línea:
+     `.quien b` es block porque ahí vive el nombre, y acá manda el renglón. */
+  .quien .color, .quien .guion { display: inline; font-size: 12px; font-weight: 700; }
   .equipos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
   .equipo-col { padding: 10px 12px; border-right: 1px solid var(--line); }
   .equipo-col:last-child { border-right: none; }

@@ -46,6 +46,18 @@ async function pedir(ruta, opciones = {}) {
 
 const aviso = (clase, texto) => el('div', { class: 'aviso ' + clase }, [texto]);
 
+/**
+ * Los goles de un partido, cada uno en el color del equipo que los metió.
+ * Es la regla en toda la app: el número dice quién ganó sin que haya que leer
+ * nada al lado. Devuelve los nodos sueltos para poder meterlos tanto en un
+ * renglón de texto como en su propio bloque.
+ */
+const golesEnColor = (partido) => [
+  el('b', { class: 'color ' + partido.equipoA }, [String(partido.golesA)]),
+  el('i', { class: 'guion' }, ['–']),
+  el('b', { class: 'color ' + partido.equipoB }, [String(partido.golesB)]),
+];
+
 /** Hoy en formato 2026-08-22, en hora local y no en UTC. */
 function hoy() {
   const d = new Date();
