@@ -32,6 +32,7 @@ const armado = {
   notas: '',
   elegidos: [],        // [{ id, color }] en el orden en que se los eligió
   colorActivo: 'azul',
+  filtro: '',          // el buscador del plantel
   planilla: null,      // lo que devolvió el servidor
   cabecera: null,      // la cabecera con la que se armó esa planilla
   guardada: null,      // la práctica ya publicada
@@ -137,7 +138,7 @@ async function conBoton(boton, trabajo, donde = armado) {
 /* ------------------------------------------------------------ vista armar */
 
 function vistaArmar(raiz) {
-  raiz.appendChild(el('h2', {}, ['La práctica']));
+  raiz.appendChild(titulo('La práctica'));
 
   const campo = (etiqueta, control) =>
     el('label', { class: 'campo' }, [el('span', {}, [etiqueta]), control]);
@@ -194,29 +195,64 @@ function vistaArmar(raiz) {
       : 'Están los ' + armado.cantidad + '. El primero de cada equipo es el que juega de más.',
   ]));
 
-  /* ---- plantel */
+  /* ---- plantel: treinta y cinco nombres, con buscador y por handicap */
 
   const activos = estado.plantel.filter((j) => j.activo);
-  raiz.appendChild(el('div', { class: 'lista' }, activos.map((j) => {
-    const marca = elegido(j.id);
-    const posicion = marca ? armado.elegidos.indexOf(marca) + 1 : null;
-    return el('button', {
-      type: 'button', class: 'quien' + (marca ? ' puesto ' + marca.color : ''),
-      onclick: () => alternar(j.id),
-    }, [
-      el('span', { class: 'orden' }, [marca ? String(posicion) : '']),
-      el('span', { style: 'flex:1' }, [
-        el('b', {}, [j.apodo]),
-        el('span', {}, [j.nombre]),
-      ]),
-      el('span', { class: 'hcp' }, [hcp(j.hcp_interno)]),
-    ]);
-  })));
 
   if (!activos.length) {
     raiz.appendChild(el('div', { class: 'vacio' }, ['No hay nadie en el plantel todavía.']));
+    return dibujarBotones(raiz);
   }
 
+  const buscador = el('input', {
+    type: 'text', placeholder: 'Buscar en el plantel…', value: armado.filtro || '',
+    'aria-label': 'Buscar en el plantel',
+    oninput: (e) => { armado.filtro = e.target.value; dibujarPlantel(); },
+  });
+  raiz.appendChild(el('div', { style: 'margin-top:10px' }, [buscador]));
+
+  const caja = el('div', { class: 'lista tabla', style: 'margin-top:8px' });
+  raiz.appendChild(caja);
+
+  function dibujarPlantel() {
+    vaciar(caja);
+    const texto = (armado.filtro || '').trim().toLowerCase();
+    const visibles = activos.filter((j) => !texto
+      || j.apodo.toLowerCase().includes(texto)
+      || j.nombre.toLowerCase().includes(texto));
+
+    if (!visibles.length) {
+      caja.appendChild(el('div', { class: 'vacio' }, ['No hay nadie que coincida.']));
+      return;
+    }
+
+    // Agrupados por handicap: es como el club piensa un equipo.
+    let ultimo = null;
+    visibles.forEach((j) => {
+      if (j.hcp_interno !== ultimo) {
+        ultimo = j.hcp_interno;
+        caja.appendChild(el('div', { class: 'banda' }, ['Handicap ' + hcp(j.hcp_interno)]));
+      }
+      const marca = elegido(j.id);
+      const posicion = marca ? armado.elegidos.indexOf(marca) + 1 : null;
+      caja.appendChild(el('button', {
+        type: 'button', class: 'quien compacto' + (marca ? ' puesto ' + marca.color : ''),
+        onclick: () => alternar(j.id),
+      }, [
+        el('span', { class: 'orden' }, [marca ? String(posicion) : '+']),
+        el('span', { style: 'flex:1;min-width:0' }, [
+          el('b', {}, [j.apodo]),
+        ]),
+        el('span', { class: 'hcp' }, [hcp(j.hcp_interno)]),
+      ]));
+    });
+  }
+  dibujarPlantel();
+
+  dibujarBotones(raiz);
+}
+
+function dibujarBotones(raiz) {
   /* ---- botones */
 
   const completo = armado.elegidos.length === armado.cantidad;
@@ -311,7 +347,7 @@ function panelPlanilla(planilla, cabecera, sinPublicar, recienGuardada) {
   acciones.appendChild(el('button', {
     class: sinPublicar ? 'ghost' : 'primary', type: 'button',
     onclick: (e) => Hoja.compartir(planilla, cabecera, e.target),
-  }, ['Compartir la imagen']));
+  }, [icono('compartir', 16), 'Compartir la imagen']));
   acciones.appendChild(el('button', {
     class: 'ghost', type: 'button',
     onclick: (e) => Hoja.copiar(planilla, cabecera, e.target),
@@ -329,6 +365,9 @@ function panelPlanilla(planilla, cabecera, sinPublicar, recienGuardada) {
 
 const practicas = {
   lista: null, abierta: null, error: null, borrando: false,
+  // Cuáles están desplegadas en la lista. Arranca con la última, que es la
+  // que uno viene a mirar; el resto quedan en un renglón.
+  desplegadas: null,
   resultado: { partidos: {}, mvpId: '' },
 };
 
@@ -549,7 +588,7 @@ function vistaPracticas(raiz) {
     return;
   }
 
-  raiz.appendChild(el('h2', {}, ['Prácticas de la temporada']));
+  raiz.appendChild(titulo('Prácticas de la temporada'));
 
   if (practicas.error) { raiz.appendChild(aviso('mal', practicas.error)); return; }
   if (!practicas.lista) { raiz.appendChild(el('div', { class: 'vacio' }, ['Cargando…'])); return; }
@@ -562,14 +601,44 @@ function vistaPracticas(raiz) {
     return;
   }
 
-  practicas.lista.forEach((p) => raiz.appendChild(tarjetaDePractica(p)));
+  // La primera vez, se abre la última práctica y nada más.
+  if (!practicas.desplegadas) practicas.desplegadas = new Set([practicas.lista[0].id]);
+
+  /* Agrupadas por mes. Una temporada son casi cincuenta prácticas: de corrido
+     es un rollo interminable, por mes se sabe siempre dónde está uno. */
+  const meses = [];
+  practicas.lista.forEach((p) => {
+    const clave = p.fecha.slice(0, 7);
+    let grupo = meses.length && meses[meses.length - 1].clave === clave
+      ? meses[meses.length - 1]
+      : null;
+    if (!grupo) { grupo = { clave, practicas: [] }; meses.push(grupo); }
+    grupo.practicas.push(p);
+  });
+
+  meses.forEach((m) => {
+    raiz.appendChild(el('div', { class: 'mes' }, [
+      nombreDelMes(m.clave),
+      el('span', { class: 'raya' }),
+      el('em', {}, [m.practicas.length + (m.practicas.length === 1 ? ' práctica' : ' prácticas')]),
+    ]));
+    m.practicas.forEach((p) => raiz.appendChild(tarjetaDePractica(p)));
+  });
 }
 
+/** 'Septiembre 2026' a partir de '2026-09'. */
+function nombreDelMes(clave) {
+  const d = new Date(clave + '-15T12:00:00');
+  const txt = d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+  return txt.charAt(0).toUpperCase() + txt.slice(1);
+}
 
 /**
  * Una práctica como se veía en la v1: los equipos con sus jugadores a la
- * vista, el marcador de cada enfrentamiento y el MVP con su estrella. Se toca
- * y se abre la planilla entera.
+ * vista, el marcador de cada enfrentamiento y el MVP con su estrella.
+ *
+ * Plegada es un solo renglón —fecha, cancha, resultado y MVP—; se toca y se
+ * despliegan los equipos. La planilla entera se abre desde el pie.
  */
 function tarjetaDePractica(p) {
   const equipos = Object.keys(p.equipos || {});
@@ -577,33 +646,57 @@ function tarjetaDePractica(p) {
   const columnas = orden.filter((c) => equipos.includes(c));
 
   const marcadores = (p.partidos || []).filter((x) => x.golesA !== null && x.golesA !== undefined);
+  const abierta = practicas.desplegadas.has(p.id);
 
-  return el('div', { class: 'card practica' }, [
+  const marcador = marcadores.length
+    ? el('span', { class: 'marcadores' }, [
+      ...marcadores.map((x) => el('span', {}, golesEnColor(x))),
+      // Plegada, el MVP viaja abajo del resultado; abierta va en el pie.
+      !abierta && p.mvp
+        ? el('span', { class: 'mvp-chico' }, [estrella(10), p.mvp])
+        : null,
+    ].filter(Boolean))
+    : el('span', { class: 'marca pendiente' }, ['sin resultado']);
+
+  return el('div', { class: 'card practica' + (abierta ? '' : ' plegada') }, [
     el('button', {
-      type: 'button', class: 'practica-cabecera',
-      onclick: () => abrirPractica(p.id),
+      type: 'button', class: 'practica-cabecera', 'aria-expanded': abierta,
+      onclick: () => {
+        if (abierta) practicas.desplegadas.delete(p.id);
+        else practicas.desplegadas.add(p.id);
+        render();
+      },
     }, [
       el('span', { style: 'flex:1;min-width:0' }, [
         el('b', {}, [fechaLarga(p.fecha)]),
         el('span', {}, ['Cancha ' + p.cancha + ' · ' + p.hora + ' hs · ' + p.formato + ' jugadores']),
       ]),
-      marcadores.length
-        ? el('span', { class: 'marcadores' },
-          marcadores.map((x) => el('span', {}, golesEnColor(x))))
-        : el('span', { class: 'marca pendiente' }, ['sin resultado']),
+      marcador,
+      icono(abierta ? 'arriba' : 'abajo', 16, 'flecha'),
     ]),
 
-    el('div', { class: 'equipos-grid' }, columnas.map((color) =>
-      el('div', { class: 'equipo-col' }, [
-        el('h4', { class: 'color ' + color }, [Hoja.LABEL[color]]),
-        ...p.equipos[color].map((j) => el('div', { class: 'renglon-jug' }, [
-          el('span', {}, [j.apodo]),
-          el('em', {}, [hcp(j.handicap)]),
-        ])),
-      ]))),
+    abierta
+      ? el('div', { class: 'equipos-grid' }, columnas.map((color) =>
+        el('div', { class: 'equipo-col' }, [
+          el('h4', { class: 'color ' + color }, [Hoja.LABEL[color]]),
+          ...p.equipos[color].map((j) => el('div', { class: 'renglon-jug' }, [
+            el('span', {}, [j.apodo]),
+            el('em', {}, [hcp(j.handicap)]),
+          ])),
+        ])))
+      : null,
 
-    p.mvp
-      ? el('div', { class: 'pie-practica' }, [el('span', { class: 'estrella' }, ['★']), 'MVP ', el('b', {}, [p.mvp])])
+    abierta
+      ? el('div', { class: 'pie-practica' }, [
+        p.mvp ? estrella(13) : null,
+        p.mvp ? 'MVP' : null,
+        p.mvp ? el('b', {}, [p.mvp]) : el('span', { style: 'color:var(--muted)' }, ['sin MVP']),
+        el('span', { style: 'flex:1' }),
+        el('button', {
+          type: 'button', class: 'ver-planilla',
+          onclick: () => abrirPractica(p.id),
+        }, ['Ver la planilla', icono('derecha', 14)]),
+      ].filter(Boolean))
       : null,
   ]);
 }
@@ -617,7 +710,7 @@ async function cargarPlantel() {
 }
 
 function vistaPlantel(raiz) {
-  raiz.appendChild(el('h2', {}, ['Plantel']));
+  raiz.appendChild(titulo('Plantel'));
 
   raiz.appendChild(el('button', {
     class: nuevo.abierto ? 'ghost' : 'primary', type: 'button',
@@ -676,7 +769,7 @@ function vistaPlantel(raiz) {
     ]));
   }
 
-  raiz.appendChild(el('div', { class: 'lista', style: 'margin-top:14px' },
+  raiz.appendChild(el('div', { class: 'lista tabla', style: 'margin-top:14px' },
     estado.plantel.map((j) => el('div', { class: 'quien estatico' + (j.activo ? '' : ' apagado') }, [
       el('span', { style: 'flex:1' }, [
         el('b', {}, [j.apodo]),
@@ -688,15 +781,16 @@ function vistaPlantel(raiz) {
 
 /* ----------------------------------------------------------------- marco */
 
-/* Las pestañas, con su ícono como en la v1. Son varias: se deslizan. */
+/* Las solapas, con su ícono dibujado arriba del texto: así entran más de
+   ancho, y el dibujo se ve igual en todos los teléfonos. */
 const PESTANAS_ADMIN = [
-  ['armar', '🏇 Armar'], ['practicas', '📋 Prácticas'], ['ranking', '🏆 Ranking'],
-  ['jugador', '👤 Jugador'], ['canchas', '🏟️ Canchas'], ['caballos', '🐴 Caballos'],
-  ['plantel', '👥 Plantel'],
+  ['armar', 'Armar'], ['practicas', 'Prácticas'], ['ranking', 'Ranking'],
+  ['jugador', 'Jugador'], ['canchas', 'Canchas'], ['caballos', 'Caballos'],
+  ['plantel', 'Plantel'],
 ];
 const PESTANAS_JUGADOR = [
-  ['practicas', '📋 Prácticas'], ['ranking', '🏆 Ranking'], ['jugador', '👤 Jugador'],
-  ['caballos', '🐴 Caballos'],
+  ['practicas', 'Prácticas'], ['ranking', 'Ranking'], ['jugador', 'Jugador'],
+  ['caballos', 'Caballos'],
 ];
 
 /** Lo que cada solapa necesita traído, la primera vez que se la mira. */
@@ -709,17 +803,19 @@ function alEntrarA(id) {
 function pestanas() {
   const cuales = estado.jugador.admin ? PESTANAS_ADMIN : PESTANAS_JUGADOR;
 
-  return el('nav', { class: 'pestanas' }, cuales.map(([id, texto]) =>
-    el('button', {
-      type: 'button', class: 'pestana', 'aria-pressed': estado.vista === id,
-      onclick: () => {
-        // Al salir de la carga de caballos se guarda lo que quedó pendiente.
-        if (estado.vista === 'caballos' && id !== 'caballos') guardarAhora();
-        estado.vista = id;
-        alEntrarA(id);
-        render();
-      },
-    }, [texto])));
+  return el('div', { class: 'barra-pestanas' }, [
+    el('nav', { class: 'pestanas' }, cuales.map(([id, texto]) =>
+      el('button', {
+        type: 'button', class: 'pestana', 'aria-pressed': estado.vista === id,
+        onclick: () => {
+          // Al salir de la carga de caballos se guarda lo que quedó pendiente.
+          if (estado.vista === 'caballos' && id !== 'caballos') guardarAhora();
+          estado.vista = id;
+          alEntrarA(id);
+          render();
+        },
+      }, [icono(id, 19), el('span', {}, [texto])]))),
+  ]);
 }
 
 function render() {

@@ -13,13 +13,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="San Diego">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Bitter:wght@400;600;700&display=swap">
 <style>
   :root {
-    --ground: #ffffff;      /* el fondo de la app */
-    --surface: #f6f8fb;     /* las tarjetas */
-    --raised: #eef2f8;      /* el encabezado */
+    --ground: #ffffff;      /* el fondo de la app y de las tarjetas */
+    --surface: #f6f8fb;     /* lo que va ADENTRO de una tarjeta */
+    --raised: #eef2f8;      /* el encabezado y los renglones de encabezado */
     --line: #dde3ec;
+    --linea-suave: #eef2f8; /* la raya entre dos renglones de una misma lista */
     --ink: #16202e;
     --muted: #6b7891;
     --teal: #00897a;        /* más oscuro que el de la v1: sobre blanco tiene que leerse */
@@ -29,12 +30,18 @@
     --blanco: #475569;      /* el equipo blanco, en un gris que se lea sobre blanco */
     --colorado: #b91c1c;
     --sobre-color: #ffffff; /* el texto arriba de un fondo de color */
+    /* Dos tipografías, las dos de fundiciones porteñas: Bitter (Huerta
+       Tipográfica) para los nombres propios y los títulos, Archivo
+       (Omnibus-Type) para la interfaz y sobre todo para los números, que en
+       serif nunca alinean en columna. */
     --serif: Bitter, Georgia, 'Times New Roman', serif;
+    --sans: Archivo, 'Helvetica Neue', Helvetica, Arial, sans-serif;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--ground); color: var(--ink);
-    font-family: var(--serif); font-size: 15px; line-height: 1.45;
+    font-family: var(--sans); font-size: 14px; line-height: 1.45;
+    font-variant-numeric: tabular-nums;
     -webkit-text-size-adjust: 100%;
   }
   a { color: var(--teal); }
@@ -52,18 +59,29 @@
     background: #fff; object-fit: cover; border: 1px solid var(--line);
   }
   .brand { flex: 1; }
-  .brand b { display: block; color: var(--teal); letter-spacing: 1.5px; font-size: 16px; }
+  .brand b { display: block; font-family: var(--serif); color: var(--teal); letter-spacing: 1.5px; font-size: 16px; }
   .brand span { display: block; color: var(--muted); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
 
-  /* Los títulos de sección, dorados y en tamaño de lectura, como en la v1. */
-  h2 { font-size: 17px; letter-spacing: 1px; color: var(--gold); font-weight: 400; margin: 24px 0 12px; }
-  h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: 1.6px; }
+  /* El título de la pantalla, en serif y a tinta plena. */
+  h1.titulo { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 18px 0 12px; }
+  /* Los títulos de sección: chicos, dorados y en versalitas. Antes eran del
+     mismo tamaño que el de la pantalla y competían con él. */
+  h2 {
+    font-family: var(--sans); font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--gold); font-weight: 700; margin: 22px 0 9px;
+  }
+  h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 1.5px; font-weight: 700; }
 
   .insignia { font-size: 11px; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
   .meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  /* Socio o temporario no merece una pastilla de color al lado del nombre. */
+  .categoria { font-size: 9.5px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--muted); }
 
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  /* Tres niveles y nada más: la página y la tarjeta son blancas —la tarjeta
+     con un filete— y el gris queda para lo que va adentro de una tarjeta. */
+  .card { background: var(--ground); border: 1px solid var(--line); border-radius: 10px; }
   .card.p { padding: 14px; }
+  .card.relleno { background: var(--surface); }
 
   input[type="text"], input[type="tel"], input[type="date"], input[type="time"],
   input[type="number"], textarea {
@@ -97,26 +115,57 @@
   .chip.color.bicolor[aria-pressed="true"] { border-color: var(--gold); background: rgba(160,119,34,.10); color: var(--gold); }
 
   .pista { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+  .pista + .campo { margin-top: 14px; }
 
   .lista { display: flex; flex-direction: column; gap: 6px; }
+  /* Una lista de renglones no son N tarjetas sueltas: es UNA tarjeta con
+     renglones adentro, separados por una raya. Entra el doble en la pantalla
+     y el ojo puede bajar por una columna. */
+  .lista.tabla { gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .lista.tabla > .quien { border: none; border-radius: 0; border-bottom: 1px solid var(--linea-suave); min-height: 50px; }
+  .lista.tabla > .quien:last-child { border-bottom: none; }
+  .lista.tabla > .quien.puesto { border-left: 3px solid transparent; }
+  .cabeza-tabla {
+    display: flex; align-items: center; gap: 10px; padding: 7px 14px;
+    background: var(--surface); border-bottom: 1px solid var(--line);
+  }
   .quien {
-    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-    padding: 11px 14px; min-height: 54px; cursor: pointer; font: inherit; color: var(--ink);
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    background: var(--ground); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 14px; min-height: 50px; cursor: pointer; font: inherit; color: var(--ink);
   }
   .quien.estatico { cursor: default; }
   .quien.apagado { opacity: .45; }
-  .quien b { display: block; font-size: 14px; font-weight: 600; }
+  .quien.compacto { min-height: 44px; padding: 4px 14px; }
+  .quien.compacto b { font-size: 14px; }
+  .veces { font-size: 13px; color: var(--ink); font-weight: 600; }
+  /* Las columnas de números de una tabla: siempre el mismo ancho, siempre
+     alineadas a la derecha, para poder bajar con el ojo por una sola. */
+  .col-chico { width: 38px; text-align: right; font-size: 12.5px; flex-shrink: 0; }
+  .col-chico.ancha { width: 52px; color: var(--muted); font-size: 11px; }
+  .col-chico.fuerte { color: var(--teal); font-weight: 600; font-size: 14px; }
+  .col-chico.aviso-carga { color: var(--gold); font-weight: 600; }
+  .cabeza-tabla .col-chico { font-size: 9px; font-weight: 700; letter-spacing: 1.1px; color: var(--muted); }
+  .cruz-fila { display: inline-block; vertical-align: -1px; margin-right: 3px; }
+  .quien b { display: block; font-family: var(--serif); font-size: 14.5px; font-weight: 600; }
   .quien > span > span { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
   .marca { font-size: 10px; letter-spacing: 1px; color: var(--gold); border: 1px solid rgba(160,119,34,.45); border-radius: 4px; padding: 3px 7px; white-space: nowrap; }
   .marca.listo { color: var(--teal); border-color: rgba(0,137,122,.45); }
   .marca.pendiente { color: var(--muted); border-color: var(--line); }
   .quien .hcp { font-size: 13px; color: var(--muted); min-width: 26px; text-align: right; }
   .quien .orden {
-    width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; font-size: 11px;
-    display: flex; align-items: center; justify-content: center; color: var(--sobre-color);
+    width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%; font-size: 10px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--linea-suave); color: #9aa5b8;
   }
   .quien.puesto .orden { background: var(--muted); color: var(--sobre-color); }
+  /* La banda de handicap, adentro de la tabla del plantel. */
+  .banda {
+    padding: 6px 14px; background: var(--surface);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted);
+  }
+  .lista.tabla > .banda:first-child { border-top: none; }
   .quien.puesto.azul { border-color: var(--azul); }
   .quien.puesto.azul .orden { background: var(--azul); }
   .quien.puesto.blanco { border-color: var(--blanco); }
@@ -129,19 +178,24 @@
   .pin {
     width: 100%; text-align: center; letter-spacing: 16px; font-size: 30px; padding: 16px 14px 16px 30px;
     background: var(--surface); border: 1px solid var(--line); border-radius: 12px; color: var(--ink);
-    font-family: var(--serif); min-height: 68px;
+    font-family: var(--sans); font-weight: 600; min-height: 68px;
   }
   .pin:focus { outline: none; border-color: var(--teal); }
 
   button.primary {
     width: 100%; background: var(--teal); color: var(--sobre-color); border: none; border-radius: 9px;
-    padding: 15px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 52px;
+    padding: 15px; font: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer; min-height: 50px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
   }
   button.primary[disabled] { background: var(--surface); color: var(--muted); cursor: not-allowed; }
+  /* Un solo botón lleno por pantalla: el resto son de contorno. */
   button.ghost {
-    width: 100%; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 9px;
-    padding: 12px; font: inherit; font-size: 14px; cursor: pointer; min-height: 48px;
+    width: 100%; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 9px;
+    padding: 12px; font: inherit; font-size: 13.5px; cursor: pointer; min-height: 46px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
   }
+  button.ghost svg { display: block; flex-shrink: 0; }
+  button.primary svg { display: block; flex-shrink: 0; }
   button.ghost[disabled] { opacity: .45; cursor: not-allowed; }
   button.ghost:hover:not([disabled]) { color: var(--ink); border-color: var(--muted); }
   button.link { background: none; border: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; padding: 10px; text-decoration: underline; }
@@ -153,25 +207,34 @@
   .acciones { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
   .salir { text-align: center; margin-top: 26px; }
 
-  /* Con cinco pestañas no entran de frente en un celular: se deslizan. */
+  /* Con siete pestañas no entran de frente en un celular: se deslizan, y el
+     degradé del borde avisa que hay más. El ícono va arriba del texto para
+     que cada una ocupe lo menos posible de ancho. */
+  .barra-pestanas { position: relative; border-bottom: 1px solid var(--line); margin: 4px 0 0; }
+  .barra-pestanas::after {
+    content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 30px;
+    pointer-events: none; background: linear-gradient(to right, rgba(255,255,255,0), var(--ground));
+  }
   .pestanas {
-    display: flex; gap: 4px; margin: 14px 0 4px;
+    display: flex; gap: 0;
     overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
   .pestanas::-webkit-scrollbar { display: none; }
   .pestana {
-    flex: 1 0 auto; background: none; border: none; border-bottom: 2px solid var(--line);
-    color: var(--muted); font: inherit; font-size: 13px; padding: 10px 10px; cursor: pointer;
-    min-height: 44px; white-space: nowrap;
+    flex: 1 0 auto; background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--muted); font: inherit; font-size: 10.5px; padding: 8px 9px 7px; cursor: pointer;
+    min-height: 52px; white-space: nowrap;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
   }
-  .pestana[aria-pressed="true"] { color: var(--teal); border-bottom-color: var(--teal); }
+  .pestana svg { width: 19px; height: 19px; display: block; }
+  .pestana[aria-pressed="true"] { color: var(--teal); border-bottom-color: var(--teal); font-weight: 600; }
 
   .cabecera-hoja { margin-bottom: 14px; }
-  .cabecera-hoja b { display: block; font-size: 17px; }
+  .cabecera-hoja b { display: block; font-family: var(--serif); font-size: 19px; font-weight: 600; }
   .cabecera-hoja span { font-size: 12px; color: var(--muted); }
-  .equipos-tabla { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+  .equipos-tabla { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
   .equipo { border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; }
-  .equipo .renglon { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; padding: 3px 0; }
+  .equipo .renglon { display: flex; justify-content: space-between; gap: 8px; font-family: var(--serif); font-size: 13.5px; padding: 3px 0; }
   .equipo .renglon.de-mas span { font-weight: 700; }
   .equipo .renglon em { font-style: normal; font-size: 12px; color: var(--muted); }
   .equipo .suma { font-size: 11px; color: var(--muted); margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
@@ -196,7 +259,7 @@
   select:focus { outline: none; border-color: var(--teal); }
   .fila { display: flex; gap: 8px; }
   .cabecera-jornada { display: flex; align-items: center; gap: 12px; }
-  .cabecera-jornada b { display: block; font-size: 15px; }
+  .cabecera-jornada b { display: block; font-family: var(--serif); font-size: 15px; font-weight: 600; }
   .cabecera-jornada span { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
   .sello { font-size: 10px; letter-spacing: 1.2px; padding: 5px 10px; border-radius: 4px; font-weight: 700; }
   .sello.azul { background: rgba(29,78,216,.10); color: var(--azul); }
@@ -205,22 +268,33 @@
   .sello.bicolor { background: rgba(160,119,34,.10); color: var(--gold); }
   .sello.aap { background: rgba(147,51,234,.10); color: #c084fc; }
 
-  .caballo { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
+  .caballo { background: var(--ground); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
   .caballo.usado { border-color: var(--teal); }
   .caballo.lesionado { border-color: var(--rojo); }
   .cab-head { display: flex; align-items: center; gap: 9px; }
-  .cab-head b { flex: 1; font-size: 14px; }
-  .cab-head i { font-style: normal; font-size: 11px; color: var(--teal); }
-  .cruz { color: var(--rojo); font-size: 13px; }
-  .lesion { font-size: 11px; color: var(--rojo); margin-top: 5px; }
-  .sacar, .marcar {
+  .cab-head b { flex: 1; font-family: var(--serif); font-size: 15px; font-weight: 600; }
+  .cab-head i { font-style: normal; font-size: 11.5px; color: var(--teal); font-weight: 600; }
+  .cruz { color: var(--rojo); font-size: 13px; flex-shrink: 0; }
+  .lesion { flex: 1; font-size: 11px; color: var(--rojo); }
+  .fila-lesion { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .sacar {
     background: none; border: none; color: var(--muted); font: inherit; font-size: 20px;
     line-height: 1; cursor: pointer; padding: 4px 8px; min-height: 32px;
   }
-  .marcar { font-size: 15px; }
-  .marcar.activa { color: var(--rojo); }
-  .marcar:hover { color: var(--rojo); }
   .sacar:hover { color: var(--rojo); }
+  /* La lesión es un interruptor con su palabra al lado: se aprieta cuando se
+     lesiona y se destilda cuando se recupera. Una cruz sola no dice eso. */
+  .marcar {
+    display: flex; align-items: center; gap: 7px; background: none; border: none;
+    font: inherit; font-size: 11px; color: var(--muted); cursor: pointer; padding: 4px 0; min-height: 36px;
+  }
+  .marcar .palanca {
+    width: 38px; height: 22px; border-radius: 11px; background: var(--line);
+    padding: 3px; display: flex; flex-shrink: 0; transition: background .15s;
+  }
+  .marcar .palanca::after { content: ''; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  .marcar.activa { color: var(--rojo); }
+  .marcar.activa .palanca { background: var(--rojo); justify-content: flex-end; }
   .chuks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
   .chuk {
     width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line);
@@ -234,15 +308,21 @@
   .puntaje select { width: auto; min-width: 78px; }
   .guardado { font-size: 11px; color: var(--teal); text-align: right; margin: 6px 0 0; }
   .guardado.mal { color: var(--rojo); }
-  .numeros { display: flex; gap: 10px; margin-top: 12px; }
-  .numeros > div { flex: 1; text-align: center; }
-  .numeros b { display: block; font-size: 24px; line-height: 1.1; }
+  /* Los números de la temporada, en un solo bloque partido por filetes. */
+  .numeros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; }
+  .numeros.p { padding: 0; }
+  .numeros > div { text-align: center; padding: 12px 6px; border-right: 1px solid var(--line); }
+  .numeros > div:last-child { border-right: none; }
+  .numeros.dos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .numeros.seis > div:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+  .numeros.seis > div:nth-child(3n) { border-right: none; }
+  .numeros b { display: block; font-size: 22px; font-weight: 600; line-height: 1.1; }
   .numeros b.teal { color: var(--teal); }
   .numeros b.oro { color: var(--gold); }
-  .numeros span { display: block; font-size: 10px; color: var(--muted); margin-top: 4px; }
-  .puesto-nro { width: 24px; text-align: center; font-size: 13px; color: var(--muted); flex-shrink: 0; }
-  .puesto-nro.podio { color: var(--gold); }
-  .hcp.teal { color: var(--teal); font-weight: 700; }
+  .numeros span { display: block; font-size: 9px; font-weight: 600; letter-spacing: 1.1px; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+  .puesto-nro { width: 22px; text-align: center; font-size: 11px; color: var(--muted); flex-shrink: 0; }
+  .puesto-nro.podio { color: var(--gold); font-weight: 700; }
+  .hcp.teal { color: var(--teal); font-weight: 600; }
 
   /* --- resultados y ranking --- */
   .marcador { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13px; }
@@ -263,24 +343,31 @@
   .cargar-gol .lado { min-width: 62px; }
   .cargar-gol .guion { color: var(--muted); }
 
-  .cabecera-ranking { display: flex; align-items: center; gap: 6px; padding: 0 14px 6px; }
+  .cabecera-ranking { display: flex; align-items: center; gap: 10px; padding: 7px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
   .cabecera-ranking .hueco { flex: 1; }
   .cabecera-ranking .col {
-    width: 46px; background: none; border: none; color: var(--muted); font: inherit;
-    font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;
-    padding: 8px 0; text-align: center; min-height: 36px;
+    width: 42px; background: none; border: none; color: var(--muted); font: inherit;
+    font-size: 9.5px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; cursor: pointer;
+    padding: 4px 0; text-align: right; min-height: 28px;
   }
   .cabecera-ranking .col[aria-pressed="true"] { color: var(--teal); }
-  .fila-ranking .num { width: 46px; text-align: center; font-size: 13px; color: var(--muted); flex-shrink: 0; }
-  .fila-ranking .num.fuerte { color: var(--teal); font-weight: 700; font-size: 16px; }
+  .fila-ranking .num { width: 42px; text-align: right; font-size: 13px; color: var(--muted); flex-shrink: 0; }
+  .fila-ranking .num.fuerte { color: var(--teal); font-weight: 600; font-size: 15px; }
+  .fila-ranking.yo { background: rgba(0,137,122,.05); }
 
-  .ficha { border-color: var(--teal); }
-  .ficha b { display: block; font-size: 19px; color: var(--teal); }
-  .ficha > span { display: block; font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .ficha { display: flex; align-items: center; gap: 12px; border: none; padding: 0; }
+  .ficha .inicial {
+    width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+    background: rgba(0,137,122,.10); color: var(--teal);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-size: 17px; font-weight: 600;
+  }
+  .ficha b { display: block; font-family: var(--serif); font-size: 21px; font-weight: 600; color: var(--teal); line-height: 1.15; }
+  .ficha > div > span { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
 
   /* Canchas, con el redondel del número como en la v1. */
-  .cancha-fila { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 8px; }
-  .cancha-fila b { font-size: 16px; }
+  .cancha-fila { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-bottom: 8px; }
+  .cancha-fila b { font-family: var(--serif); font-size: 16px; font-weight: 600; }
   .redondel {
     width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; font-size: 20px; font-weight: 700;
     background: linear-gradient(135deg, var(--teal), #008f7a); color: var(--sobre-color);
@@ -299,26 +386,36 @@
   .renglon-dato + .renglon-dato { border-top: 1px solid var(--line); }
   .renglon-dato em { display: block; font-style: normal; font-size: 10px; color: var(--muted); letter-spacing: 1px; }
   .renglon-dato b { display: block; font-size: 14px; margin-top: 2px; }
-  .canchas { display: flex; flex-wrap: wrap; gap: 8px; }
+  /* Seis canchas, seis casilleros: en fila siempre, aunque juegue en dos. */
+  .canchas { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
   .cancha {
-    flex: 1; min-width: 68px; background: var(--surface); border: 1px solid var(--line);
-    border-radius: 9px; padding: 9px 6px; text-align: center;
+    background: var(--ground); border: 1px solid var(--line);
+    border-radius: 9px; padding: 8px 2px; text-align: center;
   }
-  .cancha b { display: block; font-size: 17px; color: var(--teal); }
-  .cancha span { display: block; font-size: 13px; margin-top: 2px; }
-  .cancha em { display: block; font-style: normal; font-size: 10px; color: var(--muted); }
+  .cancha b { display: block; font-size: 15px; font-weight: 600; color: var(--teal); }
+  .cancha span { display: block; font-size: 12px; margin-top: 1px; }
+  .cancha em { display: block; font-style: normal; font-size: 9.5px; color: var(--muted); }
 
   /* --- una práctica en la lista, como la planilla de la v1 --- */
-  .practica { margin-bottom: 10px; overflow: hidden; }
+  .practica { margin-bottom: 8px; overflow: hidden; }
+  .practica.plegada .practica-cabecera { background: var(--ground); border-bottom: none; }
   .practica-cabecera {
     display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-    background: var(--raised); border: none; border-bottom: 1px solid var(--line);
-    padding: 11px 14px; cursor: pointer; font: inherit; color: var(--ink);
+    background: var(--surface); border: none; border-bottom: 1px solid var(--line);
+    padding: 10px 14px; cursor: pointer; font: inherit; color: var(--ink); min-height: 58px;
   }
-  .practica-cabecera b { display: block; font-size: 14px; }
-  .practica-cabecera > span > span { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .practica-cabecera b { display: block; font-family: var(--serif); font-size: 14.5px; font-weight: 600; }
+  .practica-cabecera > span > span { display: block; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .practica-cabecera .flecha { color: #9aa5b8; flex-shrink: 0; display: block; }
   .marcadores { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; flex-shrink: 0; }
-  .practica-cabecera .marcadores > span { display: flex; gap: 4px; align-items: baseline; font-size: 15px; white-space: nowrap; }
+  .practica-cabecera .marcadores > span { display: flex; gap: 4px; align-items: baseline; font-size: 15px; font-weight: 600; white-space: nowrap; }
+  /* El mes, como separador de la temporada. */
+  .mes {
+    display: flex; align-items: center; gap: 9px; margin: 20px 0 9px;
+    font-size: 10px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--gold);
+  }
+  .mes .raya { flex: 1; height: 1px; background: var(--line); }
+  .mes em { font-style: normal; color: var(--muted); font-weight: 400; letter-spacing: 0; font-size: 10.5px; text-transform: none; }
   .marcadores i { font-style: normal; color: var(--muted); font-size: 12px; }
   .guion { font-style: normal; color: var(--muted); }
   /* Los goles van adentro del renglón, no cada número en su propia línea:
@@ -327,15 +424,25 @@
   .equipos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
   .equipo-col { padding: 10px 12px; border-right: 1px solid var(--line); }
   .equipo-col:last-child { border-right: none; }
-  .equipo-col h4 { margin: 0 0 6px; font-size: 10px; letter-spacing: 1.6px; font-weight: 700; }
-  .renglon-jug { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; padding: 2px 0; }
-  .renglon-jug em { font-style: normal; color: var(--muted); font-size: 11px; }
+  .equipo-col h4 { margin: 0 0 6px; font-size: 9.5px; letter-spacing: 1.5px; font-weight: 700; }
+  .renglon-jug { display: flex; justify-content: space-between; gap: 6px; font-family: var(--serif); font-size: 12.5px; padding: 2px 0; }
+  .renglon-jug em { font-style: normal; color: var(--muted); font-size: 11px; font-family: var(--sans); }
   .pie-practica {
-    display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12px;
-    border-top: 1px solid var(--line); color: var(--muted); background: var(--surface);
+    display: flex; align-items: center; gap: 7px; padding: 8px 14px; font-size: 9.5px;
+    font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    border-top: 1px solid var(--line); color: var(--gold); background: var(--surface);
   }
-  .pie-practica b { color: var(--ink); }
-  .estrella { color: var(--gold); font-size: 14px; }
+  .pie-practica b { color: var(--ink); font-family: var(--serif); font-size: 13px; letter-spacing: 0; text-transform: none; }
+  .estrella { color: var(--gold); display: block; flex-shrink: 0; }
+  .practica-cabecera .marcadores > span.mvp-chico {
+    display: flex; align-items: center; gap: 4px;
+    font-family: var(--serif); font-size: 11.5px; color: var(--muted); font-weight: 400;
+  }
+  .ver-planilla {
+    display: flex; align-items: center; gap: 4px; background: none; border: none; cursor: pointer;
+    font: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: 0; text-transform: none;
+    color: var(--teal); padding: 6px 0 6px 10px; min-height: 32px;
+  }
 
   /* --- el calendario de la caballada ---
      Los nombres quedan quietos a la izquierda y la grilla se desliza: la
@@ -409,7 +516,7 @@ let filtro = '';
 
 function pantallaNombre(mensaje) {
   vaciar(app);
-  app.appendChild(el('h2', {}, ['Quién sos']));
+  app.appendChild(titulo('Quién sos'));
 
   const buscar = el('input', {
     type: 'text', placeholder: 'Buscar tu nombre…', value: filtro,
@@ -417,7 +524,7 @@ function pantallaNombre(mensaje) {
   });
   app.appendChild(buscar);
 
-  const lista = el('div', { class: 'lista', style: 'margin-top:10px' });
+  const lista = el('div', { class: 'lista tabla', style: 'margin-top:10px' });
   app.appendChild(lista);
 
   function dibujarLista() {
@@ -452,7 +559,7 @@ function pantallaPin(errorTexto) {
   vaciar(app);
   const primeraVez = !quien.activado;
 
-  app.appendChild(el('h2', {}, [primeraVez ? 'Elegí tu PIN' : 'Tu PIN']));
+  app.appendChild(titulo(primeraVez ? 'Elegí tu PIN' : 'Tu PIN'));
   app.appendChild(el('div', { class: 'card', style: 'padding:13px 15px;margin-bottom:14px' }, [
     el('div', { style: 'font-size:15px;font-weight:600' }, [quien.apodo]),
     el('div', { style: 'font-size:12px;color:var(--muted);margin-top:2px' }, [quien.nombre]),

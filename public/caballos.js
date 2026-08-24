@@ -164,7 +164,7 @@ function selectorDeJornada(raiz) {
     return;
   }
 
-  raiz.appendChild(el('h2', {}, ['Qué jornada querés cargar']));
+  raiz.appendChild(titulo('Qué jornada querés cargar'));
 
   const buscar = el('input', {
     type: 'text', placeholder: 'Buscar por fecha, cancha o torneo…', value: caballos.filtro,
@@ -172,7 +172,7 @@ function selectorDeJornada(raiz) {
   });
   raiz.appendChild(buscar);
 
-  const lista = el('div', { class: 'lista', style: 'margin-top:10px' });
+  const lista = el('div', { class: 'lista tabla', style: 'margin-top:10px' });
   raiz.appendChild(lista);
   raiz.appendChild(el('div', { style: 'text-align:center' }, [
     el('button', {
@@ -279,29 +279,33 @@ function panelCargar(raiz) {
       class: 'caballo' + (suyos.length ? ' usado' : '') + (caballo.lesionado ? ' lesionado' : ''),
     }, [
       el('div', { class: 'cab-head' }, [
-        caballo.lesionado ? el('span', { class: 'cruz', title: 'Lesionado' }, ['✚']) : null,
+        caballo.lesionado ? icono('cruz', 13, 'cruz') : null,
         el('b', {}, [caballo.nombre]),
         suyos.length
           ? el('i', {}, [cantidad(cuanto) + (cuanto === 1 ? ' chukker' : ' chukkers')])
           : null,
         el('button', {
-          class: 'marcar' + (caballo.lesionado ? ' activa' : ''), type: 'button',
-          title: caballo.lesionado ? 'Darle el alta' : 'Marcarlo lesionado',
-          'aria-label': (caballo.lesionado ? 'Darle el alta a ' : 'Marcar lesionado a ') + caballo.nombre,
-          onclick: () => marcarLesion(caballo, !caballo.lesionado),
-        }, ['✚']),
-        el('button', {
           class: 'sacar', type: 'button', 'aria-label': 'Sacar ' + caballo.nombre + ' de mi caballada',
           onclick: () => sacarCaballo(caballo),
         }, ['×']),
       ]),
-      caballo.lesionado
-        ? el('div', { class: 'lesion' }, [
-          'Lesionado' + (caballo.lesionado_desde
-            ? ' desde el ' + Hoja.fechaCorta(caballo.lesionado_desde).toLowerCase()
-            : ''),
-        ])
-        : null,
+      // El interruptor con su palabra al lado: se aprieta cuando se lesiona y
+      // se destilda cuando se recupera. Una cruz sola no decía eso.
+      el('div', { class: 'fila-lesion' }, [
+        caballo.lesionado
+          ? el('span', { class: 'lesion' }, [
+            'Lesionado' + (caballo.lesionado_desde
+              ? ' desde el ' + Hoja.fechaCorta(caballo.lesionado_desde).toLowerCase()
+              : ''),
+          ])
+          : el('span', { style: 'flex:1' }),
+        el('button', {
+          class: 'marcar' + (caballo.lesionado ? ' activa' : ''), type: 'button',
+          role: 'switch', 'aria-checked': caballo.lesionado ? 'true' : 'false',
+          'aria-label': 'Lesionado: ' + caballo.nombre,
+          onclick: () => marcarLesion(caballo, !caballo.lesionado),
+        }, [el('span', {}, ['Lesionado']), el('span', { class: 'palanca' })]),
+      ]),
       pastillas,
     ]);
 
@@ -378,7 +382,7 @@ function panelCargar(raiz) {
     el('button', {
       class: 'primary', type: 'button',
       onclick: (e) => compartirTexto(textoDeCaballos(evento), e.currentTarget),
-    }, ['Compartir por WhatsApp']),
+    }, [icono('compartir', 16), 'Compartir por WhatsApp']),
   ]));
 
   raiz.appendChild(altaDeTorneo());
@@ -563,7 +567,7 @@ function panelEstadisticas(raiz) {
   const suma = (campo) => stats.reduce((a, s) => a + s[campo], 0);
   const jornadas = (caballos.eventos || []).filter((e) => Object.keys(e.uso).length).length;
 
-  raiz.appendChild(el('div', { class: 'card p numeros' }, [
+  raiz.appendChild(el('div', { class: 'card numeros' }, [
     el('div', {}, [el('b', {}, [cantidad(suma('practicas'))]), el('span', {}, ['en prácticas'])]),
     el('div', {}, [el('b', { class: 'oro' }, [cantidad(suma('torneos'))]), el('span', {}, ['en torneos'])]),
     el('div', {}, [el('b', { class: 'teal' }, [cantidad(suma('chukkers'))]), el('span', {}, ['chukkers en total'])]),
@@ -580,34 +584,41 @@ function panelEstadisticas(raiz) {
         onclick: () => { caballos.orden = clave; render(); },
       }, [texto]))));
 
+  /* La caballada en columnas alineadas: el renglón de antes era una oración
+     que había que leer entera para encontrar el puntaje. Así entran doce
+     caballos donde entraban seis. */
   const ordenados = ordenar(stats);
-  raiz.appendChild(el('div', { class: 'lista', style: 'margin-top:10px' }, ordenados.map((s, i) => {
+  const cuandoJugo = (s) => {
     const dias = s.ultimo === null ? null : diasDesde(s.ultimo);
-    const detalle = [
-      'prácticas ' + cantidad(s.practicas),
-      'torneos ' + cantidad(s.torneos),
-      s.promedio !== null ? 'puntaje ' + unDecimal(s.promedio) : 'sin puntaje',
-      dias === null ? null : dias <= 0 ? 'jugó hoy' : dias === 1 ? 'ayer' : 'hace ' + dias + ' días',
-    ].filter(Boolean).join('  ·  ');
+    if (dias === null) return '—';
+    if (dias <= 0) return 'hoy';
+    if (dias === 1) return 'ayer';
+    return dias + ' días';
+  };
 
-    return el('div', { class: 'quien estatico' }, [
-      el('span', { class: 'puesto-nro' + (i < 3 ? ' podio' : '') }, [String(i + 1)]),
-      el('span', { style: 'flex:1' }, [
-        el('b', {}, [
-          s.caballo.lesionado ? el('span', { class: 'cruz' }, ['✚ ']) : null,
+  raiz.appendChild(el('div', { class: 'lista tabla', style: 'margin-top:10px' }, [
+    el('div', { class: 'cabeza-tabla' }, [
+      el('span', { class: 'puesto-nro' }),
+      el('span', { style: 'flex:1' }),
+      el('span', { class: 'col-chico' }, ['CHK']),
+      el('span', { class: 'col-chico' }, ['PTJE']),
+      el('span', { class: 'col-chico ancha' }, ['ÚLTIMA']),
+    ]),
+    ...ordenados.map((s, i) => el('div', { class: 'quien estatico compacto' }, [
+      el('span', { class: 'puesto-nro' }, [String(i + 1)]),
+      el('span', { style: 'flex:1;min-width:0' }, [
+        el('b', { style: s.caballo.lesionado ? 'color:var(--rojo)' : null }, [
+          s.caballo.lesionado ? icono('cruz', 11, 'cruz-fila') : null,
           s.caballo.nombre,
-        ]),
-        el('span', {}, [detalle]),
+        ].filter(Boolean)),
       ]),
-      s.chukkers7 >= 6 ? el('span', { class: 'marca' }, [cantidad(s.chukkers7) + ' en 7d']) : null,
-      // El número grande es aquello por lo que se está ordenando.
-      el('span', { class: 'hcp teal' }, [
-        caballos.orden === 'promedio'
-          ? (s.promedio === null ? '—' : unDecimal(s.promedio))
-          : cantidad(s.chukkers),
-      ]),
-    ]);
-  })));
+      el('span', { class: 'col-chico fuerte' }, [cantidad(s.chukkers)]),
+      el('span', { class: 'col-chico' }, [s.promedio === null ? '—' : unDecimal(s.promedio)]),
+      el('span', {
+        class: 'col-chico ancha' + (s.chukkers7 >= 6 ? ' aviso-carga' : ''),
+      }, [cuandoJugo(s)]),
+    ])),
+  ]));
 
   // El dato que el club hoy no tiene: qué caballo viene jugando de más.
   const cargados = stats.filter((s) => s.chukkers7 >= 6);
@@ -626,9 +637,9 @@ function panelEstadisticas(raiz) {
 
   raiz.appendChild(el('div', { class: 'acciones' }, [
     el('button', {
-      class: 'primary', type: 'button',
+      class: 'ghost', type: 'button',
       onclick: (e) => compartirTexto(textoDeEstadisticas(ordenados), e.currentTarget),
-    }, ['Compartir por WhatsApp']),
+    }, [icono('compartir', 16), 'Compartir por WhatsApp']),
   ]));
 
   grafico(raiz, ordenados);
@@ -1076,7 +1087,7 @@ function grafico(raiz, stats) {
         'caballos-' + hoy() + '.jpg',
         e.currentTarget,
       ),
-    }, ['Compartir el calendario en JPG']),
+    }, [icono('compartir', 16), 'Compartir el calendario en JPG']),
   ]));
 }
 

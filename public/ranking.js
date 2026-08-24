@@ -33,19 +33,21 @@ const canchas = {
 /** Cuando se carga un resultado, lo que está en pantalla queda viejo. */
 let rankingSucio = false;
 
-const COLOR_CATEGORIA = {
-  socio: 'var(--teal)',
-  temporario: '#3b82f6',
-  bonificado: 'var(--gold)',
-  invitado: '#a855f7',
-};
-
-const MEDALLA = ['🥇', '🥈', '🥉'];
+/** Cuál de las dos listas de "con quiénes juega" está a la vista. */
+let conQuien = 'companeros';   // companeros | cancha
 
 /** 3 en vez de 3,0 — pero 1,5 cuando hay medios. */
 const puntos = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(1).replace('.', ','));
 
 const conMayuscula = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1);
+
+/** Las dos iniciales, para el redondel de la ficha. */
+function iniciales(nombre) {
+  const partes = String(nombre).trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return '—';
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[1][0]).toUpperCase();
+}
 
 function insignia(texto, color) {
   return el('span', {
@@ -89,9 +91,9 @@ function vistaRanking(raiz) {
     });
   }
 
-  raiz.appendChild(el('h2', {}, [
+  raiz.appendChild(titulo(
     ranking.temporada ? 'Ranking · ' + ranking.temporada.nombre : 'Ranking',
-  ]));
+  ));
 
   if (ranking.error) { raiz.appendChild(aviso('mal', ranking.error)); return; }
   if (!ranking.lista) { raiz.appendChild(el('div', { class: 'vacio' }, ['Cargando…'])); return; }
@@ -103,14 +105,14 @@ function vistaRanking(raiz) {
   }
 
   // El encabezado es el que manda: tocás una columna y ordena por eso.
-  raiz.appendChild(el('div', { class: 'cabecera-ranking' }, [
+  const cabecera = el('div', { class: 'cabecera-ranking' }, [
     el('span', { class: 'hueco' }),
     ...[['practicas', 'Prác.'], ['puntos', 'Pts'], ['mvps', 'MVP']].map(([clave, texto]) =>
       el('button', {
         type: 'button', class: 'col', 'aria-pressed': ranking.orden === clave,
         onclick: () => { ranking.orden = clave; render(); },
       }, [texto])),
-  ]));
+  ]);
 
   const orden = ranking.orden;
   const otros = ['practicas', 'puntos', 'mvps'].filter((c) => c !== orden);
@@ -124,24 +126,30 @@ function vistaRanking(raiz) {
   // pero no lo abre.
   const puedeAbrir = (j) => estado.jugador.admin || j.jugador_id === estado.jugador.id;
 
-  raiz.appendChild(el('div', { class: 'lista' }, ordenada.map((j, i) =>
+  raiz.appendChild(el('div', { class: 'lista tabla' }, [cabecera, ...ordenada.map((j, i) =>
     el(puedeAbrir(j) ? 'button' : 'div', {
       type: puedeAbrir(j) ? 'button' : null,
-      class: 'quien fila-ranking' + (puedeAbrir(j) ? '' : ' estatico'),
+      class: 'quien fila-ranking' + (puedeAbrir(j) ? '' : ' estatico')
+        + (j.jugador_id === estado.jugador.id ? ' yo' : ''),
       onclick: puedeAbrir(j) ? () => abrirJugador(j.jugador_id) : null,
     }, [
-      el('span', { class: 'puesto-nro' + (i < 3 ? ' podio' : '') }, [MEDALLA[i] || String(i + 1)]),
+      // El podio en dorado, sin medallas: los emojis se dibujan distinto en
+      // cada teléfono y acá al lado están los números de verdad.
+      el('span', { class: 'puesto-nro' + (i < 3 ? ' podio' : '') }, [String(i + 1)]),
       el('span', { style: 'flex:1;min-width:0' }, [
         el('b', {}, [j.apodo]),
         el('span', { class: 'meta' }, [
-          insignia(conMayuscula(j.categoria), COLOR_CATEGORIA[j.categoria] || 'var(--muted)'),
-          'HCP ' + hcp(j.handicap),
-        ]),
+          el('span', { class: 'categoria' }, [conMayuscula(j.categoria)]),
+          el('span', {}, ['HCP ' + hcp(j.handicap)]),
+          j.jugador_id === estado.jugador.id
+            ? el('span', { class: 'categoria', style: 'color:var(--teal)' }, ['Vos'])
+            : null,
+        ].filter(Boolean)),
       ]),
       el('span', { class: 'num' + (orden === 'practicas' ? ' fuerte' : '') }, [String(j.practicas)]),
       el('span', { class: 'num' + (orden === 'puntos' ? ' fuerte' : '') }, [puntos(j.puntos)]),
       el('span', { class: 'num' + (orden === 'mvps' ? ' fuerte' : '') }, [String(j.mvps)]),
-    ]))));
+    ]))]));
 
   raiz.appendChild(el('p', { class: 'pista' }, [
     'Ganar suma 3 puntos y empatar 1. En las prácticas de 12 los enfrentamientos '
@@ -171,14 +179,15 @@ function dibujarFicha(raiz, datos, volver) {
     }, [volver.texto]));
   }
 
-  raiz.appendChild(el('div', { class: 'card p ficha' }, [
-    el('b', {}, [jugador.apodo]),
-    el('span', { class: 'meta' }, [
-      insignia(conMayuscula(jugador.categoria), COLOR_CATEGORIA[jugador.categoria] || 'var(--muted)'),
-      'HCP ' + hcp(jugador.handicap),
-      jugador.invitado_por ? 'invitado por ' + jugador.invitado_por : null,
-    ].filter(Boolean)),
-    el('span', {}, [jugador.nombre]),
+  raiz.appendChild(el('div', { class: 'ficha' }, [
+    el('div', { class: 'inicial' }, [iniciales(jugador.nombre || jugador.apodo)]),
+    el('div', { style: 'flex:1;min-width:0' }, [
+      el('b', {}, [jugador.apodo]),
+      el('span', {}, [
+        jugador.nombre + ' · ' + conMayuscula(jugador.categoria) + ' · HCP ' + hcp(jugador.handicap)
+        + (jugador.invitado_por ? ' · invitado por ' + jugador.invitado_por : ''),
+      ]),
+    ]),
   ]));
 
   /* ---- los números */
@@ -207,19 +216,20 @@ function dibujarFicha(raiz, datos, volver) {
   });
   const porcentaje = jugados ? Math.round(ganados / jugados * 100) : null;
 
-  raiz.appendChild(el('div', { class: 'card p numeros' }, [
-    el('div', {}, [el('b', { class: 'teal' }, [String(resumen.practicas)]), el('span', {}, ['prácticas'])]),
-    el('div', {}, [
-      el('b', {}, [puntos(resumen.puntos)]),
-      el('span', {}, [porcentaje === null ? 'puntos' : 'puntos · ' + porcentaje + '% ganados']),
-    ]),
+  // Todo en un solo bloque de seis: dos tarjetas apiladas con el mismo aspecto
+  // se leían como dos cosas distintas cuando son la misma.
+  raiz.appendChild(el('div', { class: 'card numeros seis' }, [
+    el('div', {}, [el('b', { class: 'teal' }, [String(resumen.practicas)]), el('span', {}, ['Prácticas'])]),
+    el('div', {}, [el('b', {}, [puntos(resumen.puntos)]), el('span', {}, ['Puntos'])]),
     el('div', {}, [el('b', { class: 'oro' }, [String(resumen.mvps)]), el('span', {}, ['MVP'])]),
-  ]));
-  raiz.appendChild(el('div', { class: 'card p numeros', style: 'margin-top:8px' }, [
-    el('div', {}, [el('b', {}, [String(resumen.chukkers)]), el('span', {}, ['chukkers jugados'])]),
     el('div', {}, [
-      el('b', { class: 'oro' }, [promedioHcp === null ? '—' : promedioHcp.toFixed(2).replace('.', ',')]),
-      el('span', {}, ['HCP promedio de la práctica']),
+      el('b', {}, [porcentaje === null ? '—' : porcentaje + '%']),
+      el('span', {}, ['Ganados']),
+    ]),
+    el('div', {}, [el('b', {}, [String(resumen.chukkers)]), el('span', {}, ['Chukkers'])]),
+    el('div', {}, [
+      el('b', {}, [promedioHcp === null ? '—' : puntos(Math.round(promedioHcp * 10) / 10)]),
+      el('span', {}, ['HCP de la práctica']),
     ]),
   ]));
 
@@ -241,20 +251,29 @@ function dibujarFicha(raiz, datos, volver) {
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, 10);
 
-  const tabla = (titulo, filas, color) => {
-    if (!filas.length) return null;
-    raiz.appendChild(el('h2', {}, [titulo]));
-    raiz.appendChild(el('div', { class: 'card p' }, filas.map(([apodo, veces], i) =>
-      el('div', { class: 'renglon-dato' }, [
-        el('span', { class: 'puesto-nro' + (i < 3 ? ' podio' : '') }, [String(i + 1)]),
-        el('b', { style: 'flex:1' }, [apodo]),
-        insignia(veces + (veces === 1 ? ' práctica' : ' prácticas'), color),
-      ]))));
-    return true;
-  };
+  /* Antes eran dos listas de diez, una abajo de la otra, casi iguales: veinte
+     renglones para decir con quiénes juega. Ahora es una sola lista con un
+     interruptor arriba. */
+  const filas = losDiez(conQuien === 'companeros' ? conmigo : cruzado);
+  if (filas.length) {
+    raiz.appendChild(el('h2', {}, ['Con quiénes juega']));
+    raiz.appendChild(el('div', { class: 'chips' }, [
+      ['companeros', 'De compañero'], ['cancha', 'Compartió cancha'],
+    ].map(([clave, texto]) => el('button', {
+      type: 'button', class: 'chip', 'aria-pressed': conQuien === clave,
+      onclick: () => { conQuien = clave; render(); },
+    }, [texto]))));
 
-  tabla('Con quién jugó de compañero', losDiez(conmigo), 'var(--teal)');
-  tabla('Con quién compartió cancha', losDiez(cruzado), 'var(--gold)');
+    raiz.appendChild(el('div', { class: 'lista tabla', style: 'margin-top:8px' },
+      filas.map(([apodo, veces], i) => el('div', { class: 'quien estatico compacto' }, [
+        el('span', { class: 'puesto-nro' }, [String(i + 1)]),
+        el('b', { style: 'flex:1;min-width:0' }, [apodo]),
+        el('span', { class: 'veces' }, [String(veces)]),
+      ]))));
+    raiz.appendChild(el('p', { class: 'pista' }, [
+      'El número es cuántas prácticas jugaron juntos.',
+    ]));
+  }
 
   /* ---- canchas */
   const suyas = {};
@@ -272,8 +291,8 @@ function dibujarFicha(raiz, datos, volver) {
   }
 
   /* ---- historial: cada práctica lleva a su planilla */
-  raiz.appendChild(el('h2', {}, ['Historial (' + jugadas.length + ')']));
-  raiz.appendChild(el('div', { class: 'lista' }, jugadas.map((p) => {
+  raiz.appendChild(el('h2', {}, ['Sus prácticas (' + jugadas.length + ')']));
+  raiz.appendChild(el('div', { class: 'lista tabla' }, jugadas.map((p) => {
     const jugados = p.partidos.filter((x) =>
       x.golesA !== null && (x.equipoA === p.miEquipo || x.equipoB === p.miEquipo || p.miEquipo === 'bicolor'));
 
@@ -286,7 +305,7 @@ function dibujarFicha(raiz, datos, volver) {
     jugados.forEach((x) => { detalle.push(' · ', ...golesEnColor(x)); });
 
     return el('button', {
-      type: 'button', class: 'quien',
+      type: 'button', class: 'quien practica-jugada',
       onclick: () => irALaPlanilla(p.id),
     }, [
       el('span', { style: 'flex:1;min-width:0' }, [
@@ -318,7 +337,7 @@ async function cargarCanchas() {
 }
 
 function vistaCanchas(raiz) {
-  raiz.appendChild(el('h2', {}, ['Canchas']));
+  raiz.appendChild(titulo('Canchas'));
 
   if (canchas.error) raiz.appendChild(aviso('mal', canchas.error));
   if (!canchas.datos) {
@@ -390,8 +409,8 @@ function vistaCanchas(raiz) {
     ]));
   }
 
-  raiz.appendChild(el('div', { class: 'lista' }, torneos.map((t) =>
-    el('div', { class: 'quien estatico' }, [
+  raiz.appendChild(el('div', { class: 'lista tabla' }, torneos.map((t) =>
+    el('div', { class: 'quien estatico torneo-fila' }, [
       el('span', { style: 'flex:1;min-width:0' }, [
         el('b', {}, [t.nombre]),
         el('span', {}, [
