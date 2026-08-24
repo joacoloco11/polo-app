@@ -329,6 +329,37 @@
   .pie-practica b { color: var(--ink); }
   .estrella { color: var(--gold); font-size: 14px; }
 
+  /* --- el calendario de la caballada ---
+     Los nombres quedan quietos a la izquierda y la grilla se desliza: la
+     temporada entera no entra en un celular, pero saber de qué caballo es
+     cada renglón no puede depender de dónde quedó el dedo. */
+  .calendario { display: flex; align-items: flex-start; margin-top: 4px; }
+  .calendario-nombres { flex: 0 0 auto; width: 74px; padding-right: 8px; }
+  .nombre-fila {
+    height: 24px; line-height: 14px; font-family: var(--serif); font-size: 10px;
+    color: var(--ink); text-align: right;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .nombre-fila.lesionado { color: var(--rojo); }
+  .calendario-grilla {
+    flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch; padding-bottom: 2px;
+  }
+  .grilla { display: block; }
+  .grilla .eje { font-family: var(--serif); font-size: 9px; fill: var(--muted); }
+  .grilla .clicable { cursor: pointer; }
+  .grilla .clicable:hover { opacity: .78; }
+  .detalle-grafico {
+    font-size: 12px; color: var(--muted); margin: 8px 0 0; min-height: 18px;
+    border-top: 1px solid var(--line); padding-top: 8px;
+  }
+  .referencia { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; align-items: center; }
+  .titulo-ref { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+  .llave { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+  .llave i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .llave i.barra { height: 3px; border-radius: 1.5px; }
+  .llave i.rayita { width: 2px; height: 13px; border-radius: 1px; }
+
   .aviso { border-radius: 9px; padding: 12px 14px; font-size: 13px; margin-top: 12px; }
   .aviso.mal { background: rgba(198,40,40,.07); border: 1px solid var(--rojo); color: var(--rojo); }
   .aviso.nota { background: var(--ground); border: 1px solid var(--line); color: var(--muted); }

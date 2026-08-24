@@ -93,6 +93,24 @@ create table if not exists caballo (
 alter table caballo add column if not exists lesionado        boolean not null default false;
 alter table caballo add column if not exists lesionado_desde  date;
 
+-- Cada vez que se lo marca lesionado se abre un período; al darle el alta se
+-- cierra. Así el calendario puede pintar los tramos viejos y no solamente el
+-- actual. Las dos columnas de arriba son el estado de hoy, que sale de acá.
+create table if not exists lesion (
+  id         uuid primary key default gen_random_uuid(),
+  caballo_id uuid not null references caballo (id) on delete cascade,
+  desde      date not null,
+  hasta      date,                              -- null = sigue lesionado
+  creada_en  timestamptz not null default now(),
+  constraint lesion_al_derecho check (hasta is null or hasta >= desde)
+);
+
+create index if not exists lesion_caballo_idx on lesion (caballo_id, desde desc);
+
+-- Un caballo no puede tener dos lesiones abiertas a la vez.
+create unique index if not exists lesion_abierta_unica
+  on lesion (caballo_id) where hasta is null;
+
 -- ---------------------------------------------------------------- prácticas
 
 create table if not exists practica (
@@ -374,6 +392,7 @@ group by c.id;
 
 alter table jugador           enable row level security;
 alter table caballo           enable row level security;
+alter table lesion            enable row level security;
 alter table practica          enable row level security;
 alter table practica_jugador  enable row level security;
 alter table practica_partido  enable row level security;
@@ -427,6 +446,13 @@ drop policy if exists mi_caballada on caballo;
 create policy mi_caballada on caballo for all
   using (jugador_id = jugador_actual() or es_admin())
   with check (jugador_id = jugador_actual() or es_admin());
+
+drop policy if exists mis_lesiones on lesion;
+create policy mis_lesiones on lesion for all
+  using (exists (select 1 from caballo c where c.id = caballo_id
+                   and (c.jugador_id = jugador_actual() or es_admin())))
+  with check (exists (select 1 from caballo c where c.id = caballo_id
+                        and (c.jugador_id = jugador_actual() or es_admin())));
 
 drop policy if exists mis_jornadas on jornada;
 create policy mis_jornadas on jornada for all

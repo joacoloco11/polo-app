@@ -434,5 +434,43 @@ window.Hoja = (function () {
     else avisar(boton, 'No se pudo copiar — sacale una captura', original);
   }
 
-  return { preparar, compartir, copiar, texto, enCanvas, fechaCorta, LABEL, IMPRESO };
+  /**
+   * Compartir cualquier imagen que arme la app, no solo la planilla: sale por
+   * el menú del celular y, donde no existe, se baja.
+   */
+  async function compartirCanvas(canvas, nombre, boton) {
+    const original = boton.dataset.original || boton.textContent;
+    boton.dataset.original = original;
+    boton.disabled = true;
+    boton.textContent = 'Preparando…';
+
+    const blob = await aBlob(canvas);
+    if (blob && navigator.canShare) {
+      const archivo = new File([blob], nombre, { type: 'image/jpeg' });
+      if (navigator.canShare({ files: [archivo] })) {
+        try {
+          await navigator.share({ files: [archivo] });
+          avisar(boton, 'Compartida', original);
+          return;
+        } catch (e) {
+          if (e && e.name === 'AbortError') { avisar(boton, original, original); return; }
+        }
+      }
+    }
+    if (!blob) { avisar(boton, 'No se pudo generar la imagen', original); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    avisar(boton, 'Guardada — mandala por WhatsApp', original);
+  }
+
+  return {
+    preparar, compartir, copiar, texto, enCanvas, compartirCanvas,
+    fechaCorta, fuente, LOGO, LABEL, IMPRESO,
+  };
 })();
