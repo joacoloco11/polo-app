@@ -147,6 +147,40 @@ function flecha(posicion, alto) {
   return svg;
 }
 
+/* ------------------------------------------------- el sello del organizador */
+
+/**
+ * De quién es el torneo, en un sello de color: azul la AAP, verde el club,
+ * naranja cualquier otro —con su abreviatura, porque el nombre entero no entra
+ * en el renglón.
+ */
+const SELLO_ORGANIZADOR = {
+  aap: { texto: 'AAP', color: '#1d4ed8' },
+  sd: { texto: 'SD', color: '#00897a' },
+  otro: { texto: null, color: '#b45309' },
+};
+
+/** 'Club Hípico Argentino' → 'CHA'; 'Tortugas' → 'TOR'. */
+function abreviar(nombre) {
+  const palabras = String(nombre || '').trim().split(/\s+/).filter(Boolean);
+  if (!palabras.length) return 'OTRO';
+  if (palabras.length === 1) return palabras[0].slice(0, 3).toUpperCase();
+  return palabras.map((p) => p[0]).join('').slice(0, 4).toUpperCase();
+}
+
+function selloDeOrganizador(organizador, nombre) {
+  // Sin organizador cargado no se inventa ninguno: los partidos viejos van sin
+  // sello y listo.
+  const sello = SELLO_ORGANIZADOR[organizador];
+  if (!sello) return null;
+  return el('span', {
+    class: 'sello-organizador',
+    style: 'background:' + sello.color + '1a;color:' + sello.color,
+    title: organizador === 'otro' ? (nombre || 'Otro organizador')
+      : organizador === 'aap' ? 'Organiza la AAP' : 'Organiza San Diego',
+  }, [sello.texto || abreviar(nombre)]);
+}
+
 /** La estrella del MVP, llena. */
 function estrella(alto) {
   const ns = 'http://www.w3.org/2000/svg';

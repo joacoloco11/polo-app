@@ -252,6 +252,24 @@ function dibujarFicha(raiz, datos, volver) {
     ]),
   ]));
 
+  // Los partidos de torneo van en su propio renglón: son otra exigencia y no
+  // tienen nada que ver con el ranking del club.
+  const rt = datos.resumenTorneos;
+  if (rt && rt.partidos) {
+    raiz.appendChild(el('p', { class: 'apartado' }, ['En torneos']));
+    raiz.appendChild(el('div', { class: 'card numeros' }, [
+      el('div', {}, [el('b', {}, [String(rt.partidos)]), el('span', {}, ['Partidos'])]),
+      el('div', {}, [
+        el('b', { class: 'teal' }, [String(rt.ganados)]),
+        el('span', {}, [rt.conResultado ? 'Ganados de ' + rt.conResultado : 'Ganados']),
+      ]),
+      el('div', {}, [
+        el('b', { class: 'oro' }, [rt.hcp === null ? '—' : puntos(rt.hcp)]),
+        el('span', {}, ['HCP del torneo']),
+      ]),
+    ]));
+  }
+
   /* ---- con quién jugó */
   const conmigo = {};   // mismo equipo
   const cruzado = {};   // misma práctica, cualquier equipo
@@ -310,31 +328,83 @@ function dibujarFicha(raiz, datos, volver) {
   }
 
   /* ---- historial: cada práctica lleva a su planilla */
-  raiz.appendChild(el('h2', {}, ['Sus prácticas (' + jugadas.length + ')']));
-  raiz.appendChild(el('div', { class: 'lista tabla' }, jugadas.map((p) => {
-    const jugados = p.partidos.filter((x) =>
-      x.golesA !== null && (x.equipoA === p.miEquipo || x.equipoB === p.miEquipo || p.miEquipo === 'bicolor'));
+  /* ---- lo que jugó: prácticas y partidos de torneo, mezclados por fecha */
+  const torneos = datos.torneos || [];
+  const todo = [
+    ...jugadas.map((p) => ({ tipo: 'practica', fecha: p.fecha, dato: p })),
+    ...torneos.map((t) => ({ tipo: 'torneo', fecha: t.fecha, dato: t })),
+  ].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
 
-    // Los goles van en el color del equipo que los metió, igual que en la
-    // lista de prácticas y en la planilla.
-    const detalle = [
-      'Cancha ' + p.cancha + ' · ' + p.formato + ' jug.'
-      + (p.hcpPractica === null ? '' : ' · HCP ' + puntos(p.hcpPractica)),
-    ];
-    jugados.forEach((x) => { detalle.push(' · ', ...golesEnColor(x)); });
+  raiz.appendChild(el('h2', {}, ['Lo que jugó (' + todo.length + ')']));
+  raiz.appendChild(el('div', { class: 'lista tabla' }, todo.map((x) =>
+    (x.tipo === 'practica' ? renglonDePractica(x.dato, jugador) : renglonDeTorneo(x.dato)))));
+}
 
-    return el('button', {
-      type: 'button', class: 'quien practica-jugada',
-      onclick: () => irALaPlanilla(p.id),
-    }, [
-      el('span', { style: 'flex:1;min-width:0' }, [
-        el('b', {}, [Hoja.fechaCorta(p.fecha)]),
-        el('span', {}, detalle),
-      ]),
-      p.mvpId === jugador.id ? insignia('MVP', 'var(--gold)') : null,
-      el('span', { class: 'sello ' + p.miEquipo }, [Hoja.LABEL[p.miEquipo]]),
-    ]);
-  })));
+/** Una práctica del club en la lista de la ficha. */
+function renglonDePractica(p, jugador) {
+  const jugados = p.partidos.filter((x) =>
+    x.golesA !== null && (x.equipoA === p.miEquipo || x.equipoB === p.miEquipo || p.miEquipo === 'bicolor'));
+
+  // Los goles van en el color del equipo que los metió, igual que en la lista
+  // de prácticas y en la planilla.
+  const detalle = [
+    'Cancha ' + p.cancha + ' · ' + p.formato + ' jug.'
+    + (p.hcpPractica === null ? '' : ' · HCP ' + puntos(p.hcpPractica)),
+  ];
+  jugados.forEach((x) => { detalle.push(' · ', ...golesEnColor(x)); });
+
+  return el('button', {
+    type: 'button', class: 'quien practica-jugada',
+    onclick: () => irALaPlanilla(p.id),
+  }, [
+    el('span', { style: 'flex:1;min-width:0' }, [
+      el('b', {}, [Hoja.fechaCorta(p.fecha)]),
+      el('span', {}, detalle),
+    ]),
+    p.mvpId === jugador.id ? insignia('MVP', 'var(--gold)') : null,
+    el('span', { class: 'sello ' + p.miEquipo }, [Hoja.LABEL[p.miEquipo]]),
+  ].filter(Boolean));
+}
+
+/**
+ * La lista de torneos no se corta por temporada —un jugador puede tener
+ * partidos de años distintos—, así que a los de otro año se les pone el año.
+ */
+function fechaDeTorneo(iso) {
+  const corta = Hoja.fechaCorta(iso);
+  const ano = iso.slice(0, 4);
+  return ano === String(new Date().getFullYear()) ? corta : corta + '/' + ano.slice(2);
+}
+
+/** Un partido de torneo en la misma lista, con el sello de su organizador. */
+function renglonDeTorneo(t) {
+  // Los partidos viejos —los que se cargaron antes de que el formulario pidiera
+  // todo esto— vienen con campos vacíos: cada dato entra solo si está.
+  const donde = t.deLocal === null || t.deLocal === undefined
+    ? null
+    : (t.deLocal ? 'Cancha ' + (t.cancha || '—') : (t.sede || 'de visitante'));
+  const detalle = [
+    donde,
+    t.chukkers ? t.chukkers + ' chukkers' : null,
+    t.hcpTorneo === null || t.hcpTorneo === undefined ? null : 'HCP ' + t.hcpTorneo,
+  ].filter(Boolean).join(' · ');
+
+  const hayResultado = t.golesAFavor !== null && t.golesAFavor !== undefined;
+  const gano = hayResultado && t.golesAFavor > t.golesEnContra;
+  const empato = hayResultado && t.golesAFavor === t.golesEnContra;
+
+  return el('div', { class: 'quien estatico torneo-fila' }, [
+    el('span', { style: 'flex:1;min-width:0' }, [
+      el('b', {}, [t.nombre]),
+      el('span', {}, [fechaDeTorneo(t.fecha) + (detalle ? ' · ' + detalle : '')]),
+    ]),
+    hayResultado
+      ? el('span', {
+        class: 'resultado-torneo ' + (gano ? 'gano' : empato ? 'empato' : 'perdio'),
+      }, [t.golesAFavor + '–' + t.golesEnContra])
+      : el('span', { class: 'marca pendiente' }, ['sin resultado']),
+    selloDeOrganizador(t.organizador, t.organizadorNombre),
+  ].filter(Boolean));
 }
 
 /** Desde la ficha se salta a la planilla de esa práctica. */

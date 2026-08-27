@@ -268,6 +268,52 @@ create table if not exists jornada (
 -- Si se juega de a medio chukker, los lugares son el doble y cada uno vale 0,5.
 alter table jornada add column if not exists medios boolean not null default false;
 
+-- ------------------------------------------------- el partido de torneo
+--
+-- Una jornada con `nombre` es un partido que el jugador cargó él mismo, y de
+-- eso el club no sabe nada: por eso se le pregunta todo.
+--
+-- `organizador` es quién lo organiza —el club, la AAP o cualquier otro— y en el
+-- último caso `organizador_nombre` guarda cuál. La cancha viene de dos maneras
+-- según dónde se jugó: de local es una de las seis de San Diego, de visitante
+-- es el nombre de la cancha ajena escrito a mano.
+alter table jornada add column if not exists organizador        text;
+alter table jornada add column if not exists organizador_nombre text;
+alter table jornada add column if not exists hcp_torneo         smallint;
+alter table jornada add column if not exists de_local           boolean;
+alter table jornada add column if not exists cancha             smallint;
+alter table jornada add column if not exists sede               text;
+alter table jornada add column if not exists goles_a_favor      smallint;
+alter table jornada add column if not exists goles_en_contra    smallint;
+
+alter table jornada drop constraint if exists jornada_organizador_valido;
+alter table jornada add  constraint jornada_organizador_valido
+  check (organizador is null or organizador in ('sd', 'aap', 'otro'));
+
+-- Si lo organiza otro, hay que decir quién.
+alter table jornada drop constraint if exists jornada_otro_con_nombre;
+alter table jornada add  constraint jornada_otro_con_nombre
+  check (organizador <> 'otro' or nullif(btrim(coalesce(organizador_nombre, '')), '') is not null);
+
+-- El handicap de un torneo va de 0 a 40, que es la escala argentina.
+alter table jornada drop constraint if exists jornada_hcp_torneo_valido;
+alter table jornada add  constraint jornada_hcp_torneo_valido
+  check (hcp_torneo is null or hcp_torneo between 0 and 40);
+
+-- De local se elige una de las seis canchas; de visitante se escribe dónde.
+alter table jornada drop constraint if exists jornada_cancha_valida;
+alter table jornada add  constraint jornada_cancha_valida
+  check (cancha is null or cancha between 1 and 6);
+
+-- O están los dos marcadores o no está ninguno: medio resultado no sirve.
+alter table jornada drop constraint if exists jornada_resultado_entero;
+alter table jornada add  constraint jornada_resultado_entero
+  check ((goles_a_favor is null) = (goles_en_contra is null));
+
+alter table jornada drop constraint if exists jornada_goles_positivos;
+alter table jornada add  constraint jornada_goles_positivos
+  check (coalesce(goles_a_favor, 0) >= 0 and coalesce(goles_en_contra, 0) >= 0);
+
 create index if not exists jornada_jugador_fecha_idx on jornada (jugador_id, fecha desc);
 
 create table if not exists jornada_chukker (

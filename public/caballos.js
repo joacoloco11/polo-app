@@ -27,9 +27,24 @@ const caballos = {
   guardado: '',         // '' | 'guardando' | 'guardado' | el error
   altaTorneo: false,
   detalle: '',           // lo último que se tocó en el gráfico
-  torneo: { nombre: '', fecha: hoy(), chukkers: 6 },
+  torneo: null,        // el formulario del partido de torneo
   error: null,
 };
+
+/** El formulario del partido, vacío. */
+const torneoEnBlanco = () => ({
+  organizador: 'sd',
+  organizadorNombre: '',
+  nombre: '',
+  fecha: hoy(),
+  hcpTorneo: '',
+  chukkers: 6,
+  deLocal: true,
+  cancha: 1,
+  sede: '',
+  golesAFavor: '',
+  golesEnContra: '',
+});
 
 const claveDe = (e) => e.jornadaId || 'p:' + e.practicaId;
 const CHUKKERS_TORNEO = 6;      // y se juegan de a medio: 12 lugares
@@ -135,6 +150,18 @@ function tituloDe(e) {
 }
 
 /**
+ * Dónde se jugó el partido y de cuánto fue, sin nombrar al organizador: en la
+ * cabecera eso ya lo dice el sello de color que va al lado.
+ */
+function dondeYCuanto(e) {
+  const donde = e.deLocal === null || e.deLocal === undefined
+    ? null
+    : (e.deLocal ? 'Cancha ' + (e.cancha || '—') : (e.sede || 'de visitante'));
+  return [donde, e.chukkers + ' chukkers' + (e.medios ? ' de a medio' : '')]
+    .filter(Boolean).join(' · ');
+}
+
+/**
  * El buscador. Sirve para lo de siempre —la práctica de ayer— y para lo que
  * pidió el club: encontrar una vieja que quedó sin cargar. Por eso cada
  * renglón dice cuántos lugares tiene puestos.
@@ -148,15 +175,17 @@ function selectorDeJornada(raiz) {
         el('b', {}, [tituloDe(evento)]),
         el('span', {}, [
           evento.tipo === 'aap'
-            ? Hoja.fechaCorta(evento.fecha) + ' · ' + evento.chukkers + ' chukkers'
-              + (evento.medios ? ' de a medio' : '')
+            ? Hoja.fechaCorta(evento.fecha) + ' · ' + dondeYCuanto(evento)
             : evento.detalle + ' · jugaste ' + evento.misChukkers.length
               + ' de los ' + evento.chukkers,
         ]),
       ]),
-      el('span', { class: 'sello ' + (evento.color || 'aap') },
-        [evento.color ? Hoja.LABEL[evento.color] : 'AAP']),
-    ]));
+      // En una práctica el sello es el color del equipo; en un partido de
+      // torneo, quién lo organiza —el mismo sello que se ve en la ficha—.
+      evento.tipo === 'aap'
+        ? selloDeOrganizador(evento.organizador, evento.organizadorNombre)
+        : el('span', { class: 'sello ' + evento.color }, [Hoja.LABEL[evento.color]]),
+    ].filter(Boolean)));
     raiz.appendChild(el('button', {
       class: 'link', type: 'button',
       onclick: () => { caballos.buscando = true; caballos.filtro = ''; render(); },
@@ -223,6 +252,14 @@ function selectorDeJornada(raiz) {
 /* --------------------------------------------------------------- la carga */
 
 function panelCargar(raiz) {
+  // Con el formulario del partido abierto no se muestra nada más: es una carga
+  // aparte y si queda colgada abajo de la caballada hay que bajar media
+  // pantalla para llegar.
+  if (caballos.altaTorneo) {
+    raiz.appendChild(altaDeTorneo());
+    return;
+  }
+
   const eventos = caballos.eventos || [];
   if (!eventos.length) {
     raiz.appendChild(el('div', { class: 'vacio' }, [
@@ -430,37 +467,113 @@ async function sacarCaballo(caballo) {
 
 /* --------------------------------------------------------- partidos de AAP */
 
+/* Los tres organizadores posibles y cómo se ven. El sello de color viaja a la
+   ficha del jugador: azul la AAP, verde el club, naranja cualquier otro. */
+const ORGANIZADORES = [
+  ['sd', 'San Diego'],
+  ['aap', 'AAP'],
+  ['otro', 'Otro'],
+];
+
+/**
+ * Un partido de torneo. El club no sabe nada de estos partidos —los juega cada
+ * uno por su cuenta—, así que se pregunta todo: quién lo organiza, cómo se
+ * llama, de cuánto es, dónde se jugó y cómo salió.
+ */
 function altaDeTorneo() {
   if (!caballos.altaTorneo) {
     return el('div', { style: 'margin-top:22px' }, [
       el('button', {
         class: 'ghost', type: 'button',
-        onclick: () => { caballos.altaTorneo = true; render(); },
+        onclick: () => {
+          caballos.altaTorneo = true;
+          if (!caballos.torneo) caballos.torneo = torneoEnBlanco();
+          render();
+        },
       }, ['Sumar un partido de torneo']),
     ]);
   }
 
+  const t = caballos.torneo;
   const campo = (etiqueta, control) =>
     el('label', { class: 'campo' }, [el('span', {}, [etiqueta]), control]);
 
-  return el('div', { class: 'card p', style: 'margin-top:22px' }, [
-    campo('Torneo', el('input', {
-      type: 'text', value: caballos.torneo.nombre, placeholder: 'Copa Ciudad de Buenos Aires',
-      oninput: (e) => { caballos.torneo.nombre = e.target.value; },
-    })),
-    campo('Fecha', el('input', {
-      type: 'date', value: caballos.torneo.fecha,
-      onchange: (e) => { caballos.torneo.fecha = e.target.value; },
-    })),
-    campo('Chukkers', el('div', { class: 'chips' }, [4, 6, 8].map((n) =>
+  return el('div', { class: 'card p', style: 'margin-top:14px' }, [
+    el('h2', { style: 'margin:0 0 12px' }, ['Un partido de torneo']),
+
+    campo('Quién lo organiza', el('div', { class: 'chips tres' }, ORGANIZADORES.map(([clave, texto]) =>
       el('button', {
-        type: 'button', class: 'chip', 'aria-pressed': caballos.torneo.chukkers === n,
-        onclick: () => { caballos.torneo.chukkers = n; render(); },
-      }, [String(n)])))),
-    el('p', { class: 'pista' }, [
-      'Se juega de a medio chukker: van a quedar ' + caballos.torneo.chukkers * 2
-      + ' lugares para cargar.',
+        type: 'button', class: 'chip', 'aria-pressed': t.organizador === clave,
+        onclick: () => { t.organizador = clave; render(); },
+      }, [texto])))),
+
+    t.organizador === 'otro'
+      ? campo('Nombre del organizador', el('input', {
+        type: 'text', value: t.organizadorNombre, placeholder: 'Ej.: Club Hípico Argentino',
+        oninput: (e) => { t.organizadorNombre = e.target.value; },
+      }))
+      : null,
+
+    campo('Nombre del torneo', el('input', {
+      type: 'text', value: t.nombre, placeholder: 'Copa Ciudad de Buenos Aires',
+      oninput: (e) => { t.nombre = e.target.value; },
+    })),
+
+    el('div', { class: 'grilla-2' }, [
+      campo('Fecha', el('input', {
+        type: 'date', value: t.fecha,
+        onchange: (e) => { t.fecha = e.target.value; },
+      })),
+      campo('HCP del torneo', el('input', {
+        type: 'number', value: t.hcpTorneo, min: 0, max: 40, step: 1, placeholder: '0 a 40',
+        oninput: (e) => { t.hcpTorneo = e.target.value; },
+      })),
     ]),
+
+    campo('Chukkers', el('div', { class: 'chips' }, [4, 5, 6, 7, 8].map((n) =>
+      el('button', {
+        type: 'button', class: 'chip', 'aria-pressed': t.chukkers === n,
+        onclick: () => { t.chukkers = n; render(); },
+      }, [String(n)])))),
+
+    campo('Dónde se jugó', el('div', { class: 'chips' }, [[true, 'De local'], [false, 'De visitante']].map(([valor, texto]) =>
+      el('button', {
+        type: 'button', class: 'chip', 'aria-pressed': t.deLocal === valor,
+        onclick: () => { t.deLocal = valor; render(); },
+      }, [texto])))),
+
+    t.deLocal
+      ? campo('Cancha', el('div', { class: 'chips tres' }, [1, 2, 3, 4, 5, 6].map((n) =>
+        el('button', {
+          type: 'button', class: 'chip', 'aria-pressed': t.cancha === n,
+          onclick: () => { t.cancha = n; render(); },
+        }, [String(n)]))))
+      : campo('En qué cancha', el('input', {
+        type: 'text', value: t.sede, placeholder: 'Ej.: Ellerstina, cancha 2',
+        oninput: (e) => { t.sede = e.target.value; },
+      })),
+
+    campo('Resultado', el('div', { class: 'marcador-alta' }, [
+      el('span', {}, ['Nosotros']),
+      el('input', {
+        type: 'number', value: t.golesAFavor, min: 0, max: 99, inputmode: 'numeric',
+        'aria-label': 'Goles a favor',
+        oninput: (e) => { t.golesAFavor = e.target.value; },
+      }),
+      el('i', { class: 'guion' }, ['–']),
+      el('input', {
+        type: 'number', value: t.golesEnContra, min: 0, max: 99, inputmode: 'numeric',
+        'aria-label': 'Goles en contra',
+        oninput: (e) => { t.golesEnContra = e.target.value; },
+      }),
+      el('span', {}, ['Ellos']),
+    ])),
+
+    el('p', { class: 'pista' }, [
+      'Se juega de a medio chukker: van a quedar ' + t.chukkers * 2 + ' lugares para cargar. '
+      + 'El resultado se puede dejar en blanco y cargarlo después.',
+    ]),
+
     el('div', { class: 'acciones' }, [
       el('button', {
         class: 'primary', type: 'button',
@@ -468,14 +581,22 @@ function altaDeTorneo() {
           const r = await pedir('/api/jornadas', {
             method: 'POST',
             body: JSON.stringify({
-              nombre: caballos.torneo.nombre,
-              fecha: caballos.torneo.fecha,
-              chukkers: caballos.torneo.chukkers,
+              nombre: t.nombre,
+              fecha: t.fecha,
+              chukkers: t.chukkers,
+              organizador: t.organizador,
+              organizadorNombre: t.organizadorNombre,
+              hcpTorneo: t.hcpTorneo,
+              deLocal: t.deLocal,
+              cancha: t.cancha,
+              sede: t.sede,
+              golesAFavor: t.golesAFavor,
+              golesEnContra: t.golesEnContra,
               medios: true,
             }),
           });
           caballos.altaTorneo = false;
-          caballos.torneo = { nombre: '', fecha: hoy(), chukkers: CHUKKERS_TORNEO };
+          caballos.torneo = torneoEnBlanco();
           await cargarJornadas();
           caballos.elegido = r.jornada.id;   // se abre en el partido recién cargado
         }, caballos),
@@ -485,7 +606,7 @@ function altaDeTorneo() {
         onclick: () => { caballos.altaTorneo = false; render(); },
       }, ['Cancelar']),
     ]),
-  ]);
+  ].filter(Boolean));
 }
 
 /* ------------------------------------------------------------ estadísticas */
@@ -738,6 +859,12 @@ function vistaCaballos(raiz) {
         type: 'button', class: 'chip', 'aria-pressed': caballos.sub === clave,
         onclick: () => {
           if (caballos.sub === 'cargar') guardarAhora();
+          // Y se sueltan los formularios que hayan quedado abiertos: si no, al
+          // volver de estadísticas la pantalla aparecía en el buscador de
+          // jornadas y no en la caballada, y parecía trabada.
+          caballos.buscando = false;
+          caballos.filtro = '';
+          caballos.altaTorneo = false;
           caballos.sub = clave;
           render();
         },
