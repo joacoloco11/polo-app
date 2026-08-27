@@ -136,6 +136,7 @@ function vistaRanking(raiz) {
       // El podio en dorado, sin medallas: los emojis se dibujan distinto en
       // cada teléfono y acá al lado están los números de verdad.
       el('span', { class: 'puesto-nro' + (i < 3 ? ' podio' : '') }, [String(i + 1)]),
+      flecha(j.flecha, 17),
       el('span', { style: 'flex:1;min-width:0' }, [
         el('b', {}, [j.apodo]),
         el('span', { class: 'meta' }, [
@@ -179,6 +180,8 @@ function dibujarFicha(raiz, datos, volver) {
     }, [volver.texto]));
   }
 
+  const como = datos.como || null;
+
   raiz.appendChild(el('div', { class: 'ficha' }, [
     el('div', { class: 'inicial' }, [iniciales(jugador.nombre || jugador.apodo)]),
     el('div', { style: 'flex:1;min-width:0' }, [
@@ -188,7 +191,23 @@ function dibujarFicha(raiz, datos, volver) {
         + (jugador.invitado_por ? ' · invitado por ' + jugador.invitado_por : ''),
       ]),
     ]),
-  ]));
+    como ? el('div', { class: 'como-viene' }, [
+      flecha(como.flecha, 26),
+      el('span', {}, [FLECHA_DICE[String(como.flecha)]]),
+    ]) : null,
+  ].filter(Boolean)));
+
+  // El handicap interno y lo que le movieron los resultados: solo el admin.
+  if (como && como.hcpEfectivo !== undefined) {
+    raiz.appendChild(el('div', { class: 'card p hcp-interno' }, [
+      el('span', { class: 'campo-chico' }, ['HCP interno']),
+      el('b', {}, [hcp(como.hcpEfectivo)]),
+      el('em', {}, [
+        'base ' + hcp(como.hcpBase)
+        + (como.ajuste ? ' · ' + (como.ajuste > 0 ? '+' : '') + como.ajuste + ' por resultados' : ' · sin cambios'),
+      ]),
+    ]));
+  }
 
   /* ---- los números */
   const conHcp = jugadas.filter((p) => p.hcpPractica !== null);

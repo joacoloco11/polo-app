@@ -6,6 +6,7 @@ const estado = {
   temporada: null,   // la temporada activa
   vista: 'practicas',
   plantel: [],       // el plantel completo (solo lo trae un administrador)
+  cumples: null,     // los cumpleaños del club (solo para un administrador)
 };
 
 /**
@@ -64,6 +65,9 @@ const TRAZOS = {
   buscar: 'M14.5 9a5.5 5.5 0 11-11 0 5.5 5.5 0 0111 0zM13.2 13.2L17 17',
   listo: 'M4 10.5l4 4 8-9',
   cruz: 'M10 4v12M4 10h12',
+  cumple: 'M3.5 11.5A1.5 1.5 0 015 10h10a1.5 1.5 0 011.5 1.5v4a1.5 1.5 0 01-1.5 1.5H5a1.5 1.5 0 01-1.5-1.5v-4z'
+    + 'M10 10V6.8M10 4.2a1.3 1.3 0 01.9 2.2c-.3.3-.6.4-.9.4s-.6-.1-.9-.4A1.3 1.3 0 0110 4.2z'
+    + 'M3.5 13.4c1.1.7 2.1.7 3.2 0s2.1-.7 3.3 0 2.1.7 3.2 0 2.2-.7 3.3 0',
 };
 
 /** Un ícono de trazo. `alto` en píxeles; hereda el color del texto. */
@@ -84,6 +88,62 @@ function icono(nombre, alto, clase) {
   const p = document.createElementNS(ns, 'path');
   p.setAttribute('d', TRAZOS[nombre] || '');
   svg.appendChild(p);
+  return svg;
+}
+
+/* --------------------------------------------------------------- la flecha */
+
+/**
+ * Cómo viene el jugador, en cinco posiciones: 2 arriba, 1 en 45° para arriba,
+ * 0 horizontal, −1 en 45° para abajo, −2 abajo. Sale de sus últimos tres
+ * partidos y la cuenta la hace el servidor.
+ *
+ * Verde para arriba, roja para abajo y los intermedios en el medio: el ángulo
+ * dice cuánto y el color lo confirma, así que se lee sin tener que pensar.
+ */
+const FLECHA_COLOR = {
+  2: '#0f8a4a',
+  1: '#4f9a52',
+  0: '#8b97ab',
+  '-1': '#cc7a3d',
+  '-2': '#c62828',
+};
+const FLECHA_DICE = {
+  2: 'viene en alza',
+  1: 'viene subiendo',
+  0: 'se mantiene',
+  '-1': 'viene bajando',
+  '-2': 'viene en baja',
+};
+const FLECHA_GIRO = { 2: -90, 1: -45, 0: 0, '-1': 45, '-2': 90 };
+
+function flecha(posicion, alto) {
+  const p = String(Math.max(-2, Math.min(2, Number(posicion) || 0)));
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  const medida = alto || 18;
+  svg.setAttribute('width', medida);
+  svg.setAttribute('height', medida);
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', FLECHA_COLOR[p]);
+  svg.setAttribute('stroke-width', 2.1);
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('class', 'flecha');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', FLECHA_DICE[p]);
+
+  const g = document.createElementNS(ns, 'g');
+  g.setAttribute('transform', 'rotate(' + FLECHA_GIRO[p] + ' 10 10)');
+  const linea = document.createElementNS(ns, 'path');
+  linea.setAttribute('d', 'M4 10h10M9.8 5.8L14 10l-4.2 4.2');
+  g.appendChild(linea);
+  svg.appendChild(g);
+
+  const titulo = document.createElementNS(ns, 'title');
+  titulo.textContent = FLECHA_DICE[p];
+  svg.appendChild(titulo);
   return svg;
 }
 

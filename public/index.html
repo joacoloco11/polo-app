@@ -74,6 +74,9 @@
 
   .insignia { font-size: 11px; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
   .meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  /* Adentro de un renglón de lista el `display:block` del `span` le ganaba al
+     flex y la categoría quedaba pegada al handicap. */
+  .quien .meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
   /* Socio o temporario no merece una pastilla de color al lado del nombre. */
   .categoria { font-size: 9.5px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--muted); }
 
@@ -364,6 +367,14 @@
   }
   .ficha b { display: block; font-family: var(--serif); font-size: 21px; font-weight: 600; color: var(--teal); line-height: 1.15; }
   .ficha > div > span { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .como-viene { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
+  .como-viene span { font-size: 9.5px; letter-spacing: .4px; color: var(--muted); white-space: nowrap; }
+  .fila-ranking .flecha { flex-shrink: 0; }
+  /* El handicap interno con su ajuste: solo lo ve un administrador. */
+  .hcp-interno { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; }
+  .hcp-interno .campo-chico { font-size: 9.5px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted); }
+  .hcp-interno b { font-size: 19px; font-weight: 600; color: var(--teal); }
+  .hcp-interno em { font-style: normal; font-size: 11px; color: var(--muted); flex: 1; text-align: right; }
 
   /* Canchas, con el redondel del número como en la v1. */
   .cancha-fila { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-bottom: 8px; }
@@ -479,6 +490,23 @@
   .aviso.mal { background: rgba(198,40,40,.07); border: 1px solid var(--rojo); color: var(--rojo); }
   .aviso.nota { background: var(--ground); border: 1px solid var(--line); color: var(--muted); }
   .aviso.ok { background: rgba(0,137,122,.07); border: 1px solid var(--teal); color: var(--teal); }
+
+  /* El cartel de cumpleaños del plantel. */
+  .cumple {
+    display: flex; align-items: center; gap: 11px; margin-bottom: 12px;
+    border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; color: var(--muted);
+  }
+  .cumple b { display: block; font-family: var(--serif); font-size: 14px; font-weight: 600; color: var(--ink); }
+  .cumple span { display: block; font-size: 11px; margin-top: 1px; }
+  .cumple svg { flex-shrink: 0; color: var(--gold); }
+  .cumple.hoy { border-color: var(--rojo); background: rgba(198,40,40,.05); }
+  .cumple.hoy svg, .cumple.hoy b { color: var(--rojo); }
+  /* El día que alguien cumple, la solapa del plantel se pone en rojo. */
+  .pestana .de-cumple { color: var(--rojo); }
+  /* Cuánto le movieron el handicap interno los resultados. */
+  .ajuste { font-size: 10.5px; font-weight: 700; min-width: 20px; text-align: right; flex-shrink: 0; }
+  .ajuste.sube { color: #0f8a4a; }
+  .ajuste.baja { color: var(--rojo); }
 
   .vacio { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 14px; }
   .pill { font-size: 10px; letter-spacing: 1.5px; padding: 4px 9px; border-radius: 4px; }
@@ -602,11 +630,60 @@ function pantallaPin(errorTexto) {
         method: 'POST',
         body: JSON.stringify({ jugadorId: quien.id, pin: pin.value }),
       });
-      adentro(r.jugador, null);
+      const sesion = await pedir('/api/sesion').catch(() => ({ jugador: r.jugador }));
+      if (sesion.jugador && sesion.jugador.faltaNacimiento) {
+        pantallaNacimiento(sesion);
+        return;
+      }
+      adentro(sesion.jugador || r.jugador, sesion.temporada, sesion.cumples);
     } catch (e) {
       pantallaPin(e.message);
     }
   }
+}
+
+/**
+ * La fecha de nacimiento, una sola vez. El club la usa para saludar el día del
+ * cumpleaños; se la ve un administrador y nadie más. Se puede dejar para
+ * después: nadie se queda afuera de la app por esto.
+ */
+function pantallaNacimiento(sesion, errorTexto) {
+  vaciar(app);
+  app.appendChild(titulo('¿Cuándo cumplís años?'));
+  app.appendChild(el('p', { class: 'pista' }, [
+    'Es para que el club te salude. La ven los administradores y nadie más. '
+    + 'Se carga una sola vez.',
+  ]));
+
+  const fecha = el('input', { type: 'date', max: hoy(), 'aria-label': 'Fecha de nacimiento' });
+  app.appendChild(el('div', { style: 'margin-top:14px' }, [fecha]));
+
+  if (errorTexto) app.appendChild(aviso('mal', errorTexto));
+
+  const seguir = el('button', { class: 'primary', type: 'button', style: 'margin-top:14px' }, ['Listo']);
+  seguir.addEventListener('click', async () => {
+    if (!fecha.value) { pantallaNacimiento(sesion, 'Elegí la fecha o dejalo para después.'); return; }
+    seguir.disabled = true;
+    seguir.textContent = 'Guardando…';
+    try {
+      await pedir('/api/sesion', {
+        method: 'POST',
+        body: JSON.stringify({ fechaNacimiento: fecha.value }),
+      });
+      const fresca = await pedir('/api/sesion');
+      adentro(fresca.jugador, fresca.temporada, fresca.cumples);
+    } catch (e) {
+      pantallaNacimiento(sesion, e.message);
+    }
+  });
+  app.appendChild(seguir);
+
+  app.appendChild(el('div', { style: 'text-align:center;margin-top:6px' }, [
+    el('button', {
+      class: 'link', type: 'button',
+      onclick: () => adentro(sesion.jugador, sesion.temporada, sesion.cumples),
+    }, ['Lo cargo después']),
+  ]));
 }
 
 /* ---------------------------------------------------------------- arranque */
@@ -614,7 +691,8 @@ function pantallaPin(errorTexto) {
 (async function arrancar() {
   try {
     const sesion = await pedir('/api/sesion');
-    adentro(sesion.jugador, sesion.temporada);
+    if (sesion.jugador.faltaNacimiento) pantallaNacimiento(sesion);
+    else adentro(sesion.jugador, sesion.temporada, sesion.cumples);
     return;
   } catch (e) { /* sin sesión: a elegir nombre */ }
 

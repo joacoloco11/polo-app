@@ -71,6 +71,12 @@ alter table jugador add column if not exists pin_puesto_en timestamptz;
 -- Freno a la fuerza bruta sobre el PIN.
 alter table jugador add column if not exists pin_intentos        smallint not null default 0;
 alter table jugador add column if not exists pin_bloqueado_hasta timestamptz;
+-- El cumpleaños: se lo pide la app la primera vez que el jugador entra y sirve
+-- para avisarle al plantel. Sale solo hacia un administrador.
+alter table jugador add column if not exists fecha_nacimiento date;
+-- Quién trajo al invitado. Ya estaba en la tabla nueva; esto pone al día una
+-- base creada antes.
+alter table jugador add column if not exists invitado_por uuid references jugador (id) on delete set null;
 
 alter table jugador drop constraint if exists jugador_nombre_unico;
 alter table jugador add  constraint jugador_nombre_unico unique (nombre);
@@ -358,6 +364,30 @@ from jugadas ju
 join jugador j on j.id = ju.jugador_id
 left join puntos pt on pt.temporada_id = ju.temporada_id and pt.jugador_id = ju.jugador_id
 left join mvps   mv on mv.temporada_id = ju.temporada_id and mv.jugador_id = ju.jugador_id;
+
+-- Cada partido que jugó cada jugador, en orden, con la diferencia de goles a su
+-- favor y si ese día fue MVP. De acá salen el ajuste del handicap interno y la
+-- flecha: la cuenta la hace el motor, que es secuencial y no entra en SQL.
+--
+-- El bicolor juega para los dos equipos, así que su resultado no es ni victoria
+-- ni derrota: queda afuera a propósito (el `join` por color ya lo excluye).
+drop view if exists v_resultado_jugador;
+create view v_resultado_jugador with (security_invoker = false) as
+select
+  pj.jugador_id,
+  p.temporada_id,
+  p.id as practica_id,
+  p.fecha,
+  p.hora,
+  pp.orden,
+  case when pj.equipo = pp.equipo_a then pp.goles_a - pp.goles_b
+       else pp.goles_b - pp.goles_a end as diferencia,
+  (p.mvp_id = pj.jugador_id) as mvp
+from practica_partido pp
+join practica p           on p.id = pp.practica_id
+join practica_jugador pj  on pj.practica_id = pp.practica_id
+where pp.goles_a is not null
+  and pj.equipo in (pp.equipo_a, pp.equipo_b);
 
 -- Carga de trabajo por caballo: es el dato que hoy el club no tiene. Cuenta
 -- prácticas y partidos de torneo juntos, que es como los siente el caballo.

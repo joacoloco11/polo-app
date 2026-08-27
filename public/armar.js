@@ -703,7 +703,78 @@ function tarjetaDePractica(p) {
 
 /* --------------------------------------------------------------- plantel */
 
-const nuevo = { nombre: '', apodo: '', handicap: 0, hcp_interno: 0, categoria: 'socio', abierto: false, error: null };
+const nuevo = {
+  nombre: '', apodo: '', handicap: 0, hcp_interno: 0,
+  categoria: 'socio', invitado_por: '', abierto: false, error: null,
+};
+
+/** '14/3' a partir de '1987-03-14'. El año del jugador no se muestra. */
+function diaYMes(iso) {
+  const [, mes, dia] = String(iso).split('-').map(Number);
+  return dia + '/' + mes;
+}
+
+/** Un desplegable con el plantel, para elegir quién invita. */
+function selectorDeJugador(elegidoId, alElegir) {
+  const s = el('select', { 'aria-label': 'Quién lo invita' });
+  s.appendChild(el('option', { value: '' }, ['— elegí un jugador —']));
+  estado.plantel
+    .filter((j) => j.activo && j.categoria !== 'invitado')
+    .slice()
+    .sort((a, b) => a.apodo.localeCompare(b.apodo))
+    .forEach((j) => {
+      const o = el('option', { value: j.id }, [j.apodo + ' · ' + j.nombre]);
+      if (j.id === elegidoId) o.selected = true;
+      s.appendChild(o);
+    });
+  s.addEventListener('change', (e) => alElegir(e.target.value));
+  return s;
+}
+
+/**
+ * El cartel de cumpleaños del plantel. El día que alguien cumple se pone en
+ * rojo —y con él el ícono de la solapa— para que los admins no se lo pierdan.
+ */
+function cartelDeCumples() {
+  const c = estado.cumples;
+  if (!c) return el('span');
+
+  if (c.hoy.length) {
+    const quienes = c.hoy.map((x) => x.apodo);
+    return el('div', { class: 'cumple hoy' }, [
+      icono('cumple', 20),
+      el('div', {}, [
+        el('b', {}, [quienes.length === 1 ? 'Hoy cumple ' + quienes[0] : 'Hoy cumplen ' + enLista(quienes)]),
+        el('span', {}, ['Mandale el saludo al grupo.']),
+      ]),
+    ]);
+  }
+
+  if (!c.proximo) {
+    return el('div', { class: 'cumple' }, [
+      icono('cumple', 20),
+      el('div', {}, [
+        el('b', {}, ['Todavía nadie cargó su cumpleaños']),
+        el('span', {}, ['Cada uno la carga la primera vez que entra a la app.']),
+      ]),
+    ]);
+  }
+
+  const p = c.proximo;
+  return el('div', { class: 'cumple' }, [
+    icono('cumple', 20),
+    el('div', {}, [
+      el('b', {}, ['El próximo cumpleaños es el de ' + p.apodo]),
+      el('span', {}, [
+        'El ' + p.dia + '/' + p.mes
+        + (p.dias === 1 ? ', mañana' : ', en ' + p.dias + ' días')
+        + (c.cargados < c.total ? ' · ' + (c.total - c.cargados) + ' sin cargar' : ''),
+      ]),
+    ]),
+  ]);
+}
+
+const enLista = (xs) => (xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + ' y ' + xs[xs.length - 1]);
 
 async function cargarPlantel() {
   estado.plantel = (await pedir('/api/jugadores')).jugadores;
@@ -711,6 +782,7 @@ async function cargarPlantel() {
 
 function vistaPlantel(raiz) {
   raiz.appendChild(titulo('Plantel'));
+  raiz.appendChild(cartelDeCumples());
 
   raiz.appendChild(el('button', {
     class: nuevo.abierto ? 'ghost' : 'primary', type: 'button',
@@ -745,6 +817,11 @@ function vistaPlantel(raiz) {
           type: 'button', class: 'chip', 'aria-pressed': nuevo.categoria === c,
           onclick: () => { nuevo.categoria = c; render(); },
         }, [c])))),
+      // Al invitado se le anota quién lo trajo: es de las primeras cosas que
+      // se preguntan en el club cuando aparece una cara nueva.
+      nuevo.categoria === 'invitado'
+        ? campo('Quién lo invita', selectorDeJugador(nuevo.invitado_por, (id) => { nuevo.invitado_por = id; }))
+        : null,
       nuevo.error ? aviso('mal', nuevo.error) : null,
       el('button', {
         class: 'primary', type: 'button', style: 'margin-top:10px',
@@ -757,10 +834,14 @@ function vistaPlantel(raiz) {
                 nombre: nuevo.nombre, apodo: nuevo.apodo,
                 handicap: nuevo.handicap, hcp_interno: nuevo.hcp_interno,
                 categoria: nuevo.categoria,
+                invitado_por: nuevo.invitado_por || null,
               }),
             });
             await cargarPlantel();
-            Object.assign(nuevo, { nombre: '', apodo: '', handicap: 0, hcp_interno: 0, abierto: false });
+            Object.assign(nuevo, {
+              nombre: '', apodo: '', handicap: 0, hcp_interno: 0,
+              invitado_por: '', abierto: false,
+            });
           } catch (err) {
             nuevo.error = err.message;
           }
@@ -773,10 +854,21 @@ function vistaPlantel(raiz) {
     estado.plantel.map((j) => el('div', { class: 'quien estatico' + (j.activo ? '' : ' apagado') }, [
       el('span', { style: 'flex:1' }, [
         el('b', {}, [j.apodo]),
-        el('span', {}, [j.nombre + ' · ' + j.categoria + (j.activado ? '' : ' · sin entrar todavía')]),
+        el('span', {}, [
+          j.nombre + ' · ' + j.categoria
+          + (j.invitado_por ? ' de ' + j.invitado_por : '')
+          + (j.activado ? '' : ' · sin entrar todavía')
+          + (j.fecha_nacimiento ? ' · cumple ' + diaYMes(j.fecha_nacimiento) : ''),
+        ]),
       ]),
-      el('span', { class: 'hcp' }, [hcp(j.hcp_interno)]),
-    ]))));
+      // El handicap con el que se arman los equipos: la base más lo que
+      // movieron los resultados.
+      el('span', { class: 'hcp teal' }, [hcp(j.hcp_efectivo)]),
+      j.ajuste
+        ? el('span', { class: 'ajuste ' + (j.ajuste > 0 ? 'sube' : 'baja') },
+          [(j.ajuste > 0 ? '+' : '') + j.ajuste])
+        : null,
+    ].filter(Boolean)))));
 }
 
 /* ----------------------------------------------------------------- marco */
@@ -814,7 +906,10 @@ function pestanas() {
           alEntrarA(id);
           render();
         },
-      }, [icono(id, 19), el('span', {}, [texto])]))),
+      }, [
+        icono(id, 19, id === 'plantel' && hayCumpleHoy() ? 'de-cumple' : null),
+        el('span', {}, [texto]),
+      ]))),
   ]);
 }
 
@@ -841,10 +936,14 @@ function render() {
   ]));
 }
 
+/** ¿Cumple alguien hoy? Solo lo sabe un admin: el dato no sale para el resto. */
+const hayCumpleHoy = () => !!(estado.cumples && estado.cumples.hoy.length);
+
 /** Arranca la parte de adentro: trae lo que hace falta y dibuja. */
-async function adentro(jugador, temporada) {
+async function adentro(jugador, temporada, cumples) {
   estado.jugador = jugador;
   estado.temporada = temporada || null;
+  estado.cumples = cumples || null;
   estado.vista = jugador.admin ? 'armar' : 'practicas';
 
   document.getElementById('subtitulo').textContent = jugador.apodo;
