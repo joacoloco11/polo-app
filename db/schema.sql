@@ -234,6 +234,68 @@ alter table torneo add column if not exists chukkers smallint not null default 6
 
 create index if not exists torneo_temporada_fecha_idx on torneo (temporada_id, fecha desc);
 
+-- ------------------------------------------------- el estado de las canchas
+--
+-- Tres cosas que no son juego pero explican el juego: cuánto llovió, qué se le
+-- echó a cada cancha y qué anotó el que la miró.
+
+-- La lluvia es del club, no de una cancha: llueve sobre las seis. Un día, unos
+-- milímetros, y nada más. Un solo renglón por día: si se carga de nuevo, se
+-- corrige el que estaba.
+create table if not exists lluvia (
+  id           uuid primary key default gen_random_uuid(),
+  temporada_id uuid not null references temporada (id) on delete cascade,
+  fecha        date not null,
+  mm           smallint not null check (mm >= 0 and mm <= 500),
+  cargada_por  uuid references jugador (id) on delete set null,
+  creada_en    timestamptz not null default now()
+);
+
+create unique index if not exists lluvia_dia_unico on lluvia (temporada_id, fecha);
+
+-- Los trabajos de cancha. Arena y fertilizante son los que el club hace
+-- siempre, y por eso tienen su unidad fija y su total propio. `otro` es la
+-- puerta para lo demás —cal, semilla, horas de rolo— sin tener que tocar la app
+-- cada vez que aparece un trabajo nuevo: se escribe cómo se llama y en qué se
+-- mide.
+create table if not exists cancha_trabajo (
+  id           uuid primary key default gen_random_uuid(),
+  temporada_id uuid not null references temporada (id) on delete cascade,
+  cancha       smallint not null check (cancha between 1 and 6),
+  fecha        date not null,
+  tipo         text not null check (tipo in ('arena', 'fertilizante', 'otro')),
+  nombre       text,
+  cantidad     numeric(9,2) not null check (cantidad > 0),
+  unidad       text not null,
+  cargado_por  uuid references jugador (id) on delete set null,
+  creado_en    timestamptz not null default now(),
+  -- Si es "otro", hay que decir cómo se llama.
+  constraint trabajo_otro_con_nombre
+    check (tipo <> 'otro' or nullif(btrim(coalesce(nombre, '')), '') is not null)
+);
+
+create index if not exists trabajo_temporada_idx on cancha_trabajo (temporada_id, cancha, fecha desc);
+
+-- Una observación puede hablar de varias canchas a la vez —"cortadas a 3 cm, la
+-- 6 necesita fertilizante"—, así que las canchas van en su propia tabla.
+create table if not exists cancha_observacion (
+  id           uuid primary key default gen_random_uuid(),
+  temporada_id uuid not null references temporada (id) on delete cascade,
+  fecha        date not null,
+  texto        text not null check (btrim(texto) <> ''),
+  autor_id     uuid references jugador (id) on delete set null,
+  creada_en    timestamptz not null default now()
+);
+
+create table if not exists observacion_cancha (
+  observacion_id uuid not null references cancha_observacion (id) on delete cascade,
+  cancha         smallint not null check (cancha between 1 and 6),
+  primary key (observacion_id, cancha)
+);
+
+create index if not exists observacion_temporada_idx on cancha_observacion (temporada_id, fecha desc);
+create index if not exists observacion_cancha_idx on observacion_cancha (cancha);
+
 -- ------------------------------------------------------------------ jornadas
 --
 -- Una jornada es un día de caballos de UN jugador. Hay de dos clases y se
@@ -477,6 +539,10 @@ alter table jornada           enable row level security;
 alter table jornada_chukker   enable row level security;
 alter table jornada_puntaje   enable row level security;
 alter table temporada         enable row level security;
+alter table lluvia              enable row level security;
+alter table cancha_trabajo      enable row level security;
+alter table cancha_observacion  enable row level security;
+alter table observacion_cancha  enable row level security;
 
 create or replace function jugador_actual() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claims', true)::jsonb ->> 'sub', '')::uuid;
@@ -561,6 +627,28 @@ drop policy if exists admin_jugadores on jugador;
 create policy admin_jugadores on jugador           for all using (es_admin()) with check (es_admin());
 drop policy if exists admin_temporadas on temporada;
 create policy admin_temporadas on temporada         for all using (es_admin()) with check (es_admin());
+
+-- El estado de las canchas lo lee todo el club —saber que la 4 está cerrada le
+-- sirve a cualquiera— pero cargarlo es de los admin.
+drop policy if exists leer_lluvia on lluvia;
+create policy leer_lluvia on lluvia for select using (true);
+drop policy if exists admin_lluvia on lluvia;
+create policy admin_lluvia on lluvia for all using (es_admin()) with check (es_admin());
+
+drop policy if exists leer_trabajos on cancha_trabajo;
+create policy leer_trabajos on cancha_trabajo for select using (true);
+drop policy if exists admin_trabajos on cancha_trabajo;
+create policy admin_trabajos on cancha_trabajo for all using (es_admin()) with check (es_admin());
+
+drop policy if exists leer_observaciones on cancha_observacion;
+create policy leer_observaciones on cancha_observacion for select using (true);
+drop policy if exists admin_observaciones on cancha_observacion;
+create policy admin_observaciones on cancha_observacion for all using (es_admin()) with check (es_admin());
+
+drop policy if exists leer_obs_canchas on observacion_cancha;
+create policy leer_obs_canchas on observacion_cancha for select using (true);
+drop policy if exists admin_obs_canchas on observacion_cancha;
+create policy admin_obs_canchas on observacion_cancha for all using (es_admin()) with check (es_admin());
 
 -- Control de que quedó todo armado. Los avisos amarillos de "does not exist,
 -- skipping" son normales: es el archivo fijándose qué falta antes de crearlo.

@@ -27,10 +27,32 @@ const COLOR_CANCHA = {
   6: '#008300',   // verde
 };
 const CANCHAS_TODAS = [1, 2, 3, 4, 5, 6];
+
+/* Los dos trabajos que el club hace siempre tienen su color; "otro" va en gris,
+   que puede ser cualquier cosa. Los dos se leen sobre blanco: 5,9:1 el marrón
+   de la arena y 7,1:1 el verde del fertilizante. */
+const CLASE_TRABAJO = { arena: 'arena', fertilizante: 'fert', otro: 'otro-trabajo' };
+const COLOR_LLUVIA = '#2a78d6';
+const UNIDAD_FIJA = { arena: 'm³', fertilizante: 'kg' };
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 const UN_DIA = 86400000;
 const enFecha = (iso) => new Date(iso + 'T12:00:00Z');
+
+/**
+ * Blanco o tinta arriba del color de la cancha, el que se lea mejor. Los seis
+ * colores están elegidos para distinguirse entre sí como líneas, no para tener
+ * texto encima: el amarillo de la 4 con letra blanca no se lee.
+ */
+function tintaSobre(hex) {
+  const c = hex.replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const v = parseInt(c.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  const luz = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 1.05 / (luz + 0.05) >= (luz + 0.05) / 0.0687 ? '#ffffff' : '#16202e';
+}
 
 /** El lunes de la semana de esa fecha. */
 function lunesDe(iso) {
@@ -43,10 +65,18 @@ function lunesDe(iso) {
  * De la lista de días que manda el servidor a las series que se dibujan: una
  * por cancha, con un punto por semana.
  */
-function seriesDeCanchas(dias) {
+function seriesDeCanchas(dias, lluvias, trabajos) {
   if (!dias || !dias.length) return null;
 
-  const semanas = [...new Set(dias.map((d) => lunesDe(d.fecha)))].sort();
+  // Las semanas salen de TODO lo que pasó, no solo de lo que se jugó: una
+  // semana de 140 mm es justamente una semana en la que nadie jugó, y si no
+  // tuviera columna la lluvia que lo explica quedaría afuera del cuadro.
+  const cuando = [
+    ...dias.map((d) => d.fecha),
+    ...(lluvias || []).map((l) => l.fecha),
+    ...(trabajos || []).map((t) => t.fecha),
+  ];
+  const semanas = [...new Set(cuando.map(lunesDe))].sort();
   const origen = enFecha(semanas[0]).getTime();
   const cuandoDe = (iso) => (enFecha(iso).getTime() - origen) / UN_DIA;
   const largo = cuandoDe(semanas[semanas.length - 1]) + 6;
@@ -64,12 +94,16 @@ function seriesDeCanchas(dias) {
         semana: s,
       };
     });
+    const suyos = (trabajos || []).filter((t) => Number(t.cancha) === c);
     return {
       cancha: c,
       color: COLOR_CANCHA[c],
       puntos,
       total: puntos.reduce((a, p) => a + p.total, 0),
       partidos: puntos.reduce((a, p) => a + p.partidos.length, 0),
+      trabajos: suyos,
+      arena: sumaDe(suyos, 'arena'),
+      fertilizante: sumaDe(suyos, 'fertilizante'),
     };
   });
 
@@ -78,9 +112,27 @@ function seriesDeCanchas(dias) {
   // menos posible.
   [...series].sort((a, b) => b.total - a.total).forEach((s, k) => { s.orden = k; });
 
+  // La lluvia se dibuja donde cayó, así que va con su día y sus milímetros. Solo
+  // la de adentro del gráfico: una lluvia de antes de la primera práctica no
+  // tiene dónde pararse.
+  const agua = (lluvias || [])
+    .map((l) => ({ ...l, x: cuandoDe(l.fecha) }))
+    .filter((l) => l.x >= 0 && l.x <= largo && l.mm > 0)
+    .sort((a, b) => a.x - b.x);
+
   const techo = Math.max(1, ...series.flatMap((s) => s.puntos.map((p) => p.total)));
-  return { semanas, series, techo, largo, cuandoDe };
+  return { semanas, series, techo, largo, cuandoDe, agua };
 }
+
+/** Cuánta arena —o cuánto fertilizante— se le echó en total. */
+const sumaDe = (trabajos, tipo) => trabajos
+  .filter((t) => t.tipo === tipo)
+  .reduce((a, t) => a + Number(t.cantidad), 0);
+
+/** 12 y no 12,00; pero 2,5 sí, que media tonelada de arena es media. */
+const enNumero = (n) => (Number.isInteger(Number(n))
+  ? String(Number(n))
+  : String(Math.round(Number(n) * 10) / 10).replace('.', ','));
 
 /* ---------------------------------------------------------------- la curva */
 /* Interpolación monótona (Fritsch–Carlson): curva suave que nunca se pasa de
@@ -194,6 +246,15 @@ function puntosDePartido(serie, pts, m, x, medida) {
   return salida;
 }
 
+/**
+ * El ancho de la franja de lluvia, en píxeles. 150 mm ocupan dos días y de ahí
+ * para abajo en proporción; nunca menos de un pelo, para que una llovizna igual
+ * se vea. Va detrás de las curvas y bien transparente: es el clima, no una
+ * cancha más.
+ */
+const DIAS_POR_MM = 2 / 150;
+const anchoDeLluvia = (mm, anchoDia) => Math.max(1.5, mm * DIAS_POR_MM * anchoDia);
+
 /* --------------------------------------------------------------- el dibujo */
 
 const svgNodo = (tag, attrs, hijos) => {
@@ -216,7 +277,7 @@ function curvasJuntas(svg, plano, { ancho, alto, separacion, grosor }) {
   const media = (CANCHAS_TODAS.length - 1) / 2 * separacion;
   const izq = 26;
   const der = 10;
-  const arriba = 24;
+  const arriba = plano.agua.length ? 36 : 24;
   const abajo = 32 + media;
   const x = (d) => izq + (ancho - izq - der) * d / largo;
   const y = (v) => arriba + (alto - arriba - abajo) * (1 - v / techo);
@@ -229,6 +290,28 @@ function curvasJuntas(svg, plano, { ancho, alto, separacion, grosor }) {
       x: izq - 9, y: y(v) + 4, 'text-anchor': 'end', class: 'eje',
     }, [String(v)]));
   }
+
+  // La lluvia: arriba de la grilla y abajo de las curvas, con sus milímetros
+  // escritos. Si dos caen muy juntas, la segunda se saltea el número: mejor sin
+  // número que encimado.
+  const anchoDia = x(1) - x(0);
+  let ultimoMm = -1e9;
+  plano.agua.forEach((l) => {
+    const w = anchoDeLluvia(l.mm, anchoDia);
+    const centro = x(l.x);
+    const banda = svgNodo('rect', {
+      x: centro - w / 2, y: arriba - 6, width: w,
+      height: y(0) + media + 3 - (arriba - 6), class: 'banda-lluvia',
+    });
+    banda.appendChild(svgNodo('title', {}, [Hoja.fechaCorta(l.fecha) + ' · ' + l.mm + ' mm']));
+    svg.appendChild(banda);
+
+    if (centro - ultimoMm < 34) return;
+    ultimoMm = centro;
+    svg.appendChild(svgNodo('text', {
+      x: centro, y: arriba - 11, 'text-anchor': 'middle', class: 'mm-lluvia',
+    }, [l.mm + ' mm']));
+  });
 
   rotulosDelEje(semanas, x, plano.cuandoDe, 34).forEach((r) => {
     svg.appendChild(svgNodo('text', {
@@ -252,7 +335,7 @@ function curvasJuntas(svg, plano, { ancho, alto, separacion, grosor }) {
   // Un punto por partido, montado sobre su curva, en el día que se jugó. Los
   // del mismo día quedan casi pegados; los de días distintos los separa el
   // calendario solo.
-  const medida = medidaDelPunto(x(1) - x(0), grosor * 2.2, 2.6);
+  const medida = medidaDelPunto(anchoDia, grosor * 2.2, 2.6);
   dibujadas.forEach(({ serie, pts, m }) => {
     puntosDePartido(serie, pts, m, x, medida).forEach((p) => {
       svg.appendChild(svgNodo('circle', {
@@ -283,13 +366,23 @@ function curvasPorCancha(caja, plano) {
     const y = (v) => 40 - 32 * v / techo;
     svg.appendChild(svgNodo('line', { x1: 0, x2: 300, y1: 40, y2: 40, class: 'base' }));
 
+    // La lluvia cae sobre las seis, así que va en todos los renglones: si
+    // estuviera en uno solo parecería que llovió únicamente ahí.
+    const anchoDia = x(1) - x(0);
+    plano.agua.forEach((l) => {
+      const w = anchoDeLluvia(l.mm, anchoDia);
+      svg.appendChild(svgNodo('rect', {
+        x: x(l.x) - w / 2, y: 2, width: w, height: 38, class: 'banda-lluvia',
+      }));
+    });
+
     const pts = conPuntas(s.puntos, largo).map((p) => ({ x: x(p.x), y: y(p.total) }));
     const m = pendientesDe(pts);
     svg.appendChild(svgNodo('path', {
       d: caminoDe(pts, m), class: 'linea', stroke: s.color, 'stroke-width': 2,
     }));
 
-    const medida = medidaDelPunto(x(1) - x(0), 4, 2.4);
+    const medida = medidaDelPunto(anchoDia, 4, 2.4);
     puntosDePartido(s, pts, m, x, medida).forEach((p) => {
       svg.appendChild(svgNodo('circle', {
         cx: p.cx, cy: p.cy, r: medida.radio, fill: s.color, class: 'punto-partido',
@@ -324,13 +417,31 @@ function numerosDeCanchas(caja, plano) {
 
   let html = '<table><thead><tr><th>Cancha</th>'
     + cab.map((c) => '<th>' + c + '</th>').join('') + '<th>Total</th></tr></thead><tbody>';
+
+  // Arriba de todo la lluvia, que es la que explica las semanas flojas.
+  const mmPorSemana = semanas.map((s) => plano.agua
+    .filter((l) => lunesDe(l.fecha) === s)
+    .reduce((a, l) => a + l.mm, 0));
+  const mmTotal = mmPorSemana.reduce((a, b) => a + b, 0);
+  if (mmTotal) {
+    html += '<tr class="fila-lluvia"><td>Lluvia<span class="sub-total">' + mmTotal + ' mm</span></td>'
+      + mmPorSemana.map((mm) => '<td>' + (mm ? mm + '<span class="parcial">mm</span>' : '—') + '</td>').join('')
+      + '<td>' + mmTotal + '</td></tr>';
+  }
+
   series.forEach((s) => {
-    html += '<tr><td><span class="punto-cancha" style="background:' + s.color + '"></span>C' + s.cancha + '</td>';
+    html += '<tr><td><span class="punto-cancha" style="background:' + s.color + '"></span>C' + s.cancha
+      + (s.arena ? '<span class="sub-total arena">' + enNumero(s.arena) + ' m³</span>' : '')
+      + (s.fertilizante ? '<span class="sub-total fert">' + enNumero(s.fertilizante) + ' kg</span>' : '')
+      + '</td>';
     s.puntos.forEach((p) => {
+      const deLaSemana = s.trabajos.filter((t) => lunesDe(t.fecha) === p.semana);
       html += '<td>' + (p.total || '—')
         + (p.partidos.length
           ? ' <span style="color:' + s.color + ';font-weight:700">' + '•'.repeat(p.partidos.length) + '</span>'
           : '')
+        + deLaSemana.map((t) => '<span class="parcial ' + CLASE_TRABAJO[t.tipo] + '">'
+          + enNumero(t.cantidad) + ' ' + t.unidad + '</span>').join('')
         + '</td>';
     });
     html += '<td><b>' + s.total + '</b></td></tr>';
@@ -342,7 +453,9 @@ function numerosDeCanchas(caja, plano) {
   const rodante = el('div', { class: 'rodante' });
   rodante.innerHTML = html;
   caja.appendChild(rodante);
-  caja.appendChild(el('p', { class: 'pista' }, ['Cada ● es un partido de torneo.']));
+  caja.appendChild(el('p', { class: 'pista' }, [
+    'Cada ● es un partido de torneo. En marrón la arena, en verde el fertilizante.',
+  ]));
 }
 
 /* ------------------------------------------------------------------ en JPG */
@@ -353,7 +466,7 @@ function usoDeCanchasEnCanvas(plano, temporada) {
   const { semanas, series, techo, largo } = plano;
   const M = JPG_CANCHAS;
   const margen = 70;
-  const cabecera = 190;
+  const cabecera = 210;
   const pie = 215;
   const alto = cabecera + M.alto + pie;
 
@@ -404,7 +517,25 @@ function usoDeCanchasEnCanvas(plano, temporada) {
     ctx.fillText(String(v), izq - 18, y(v) + 8);
   }
 
+  // La lluvia, detrás de las curvas y con sus milímetros escritos: el JPG no
+  // tiene dónde tocar para que salga el cartelito.
+  const anchoDia = x(1) - x(0);
   ctx.textAlign = 'center';
+  let ultimoMm = -1e9;
+  plano.agua.forEach((l) => {
+    const w = anchoDeLluvia(l.mm, anchoDia);
+    const centro = x(l.x);
+    ctx.fillStyle = COLOR_LLUVIA;
+    ctx.globalAlpha = 0.22;
+    ctx.fillRect(centro - w / 2, arriba - 14, w, abajo + media + 6 - (arriba - 14));
+    ctx.globalAlpha = 1;
+    if (centro - ultimoMm < 90) return;
+    ultimoMm = centro;
+    ctx.font = Hoja.fuente(21, 'bold');
+    ctx.fillStyle = COLOR_LLUVIA;
+    ctx.fillText(l.mm + ' mm', centro, arriba - 24);
+  });
+
   rotulosDelEje(semanas, x, plano.cuandoDe, 90).forEach((r) => {
     ctx.font = Hoja.fuente(23, r.mes ? 'bold' : '');
     ctx.fillStyle = r.mes ? '#16202e' : '#6b7891';
@@ -462,8 +593,11 @@ function usoDeCanchasEnCanvas(plano, temporada) {
   });
   ctx.font = Hoja.fuente(21);
   ctx.fillStyle = '#6b7891';
-  ctx.fillText('El punto sobre la línea es un partido de torneo. Club de Campo San Diego.',
-    margen, alto - 40);
+  ctx.fillText(
+    'El punto sobre la línea es un partido de torneo; la franja azul, lluvia. '
+    + 'Club de Campo San Diego.',
+    margen, alto - 40,
+  );
 
   return canvas;
 }
@@ -474,7 +608,7 @@ function usoDeCanchasEnCanvas(plano, temporada) {
 let vistaGrafico = 'juntas';   // juntas | renglones | numeros
 
 function graficoDeCanchas(raiz, datos) {
-  const plano = seriesDeCanchas(datos.dias);
+  const plano = seriesDeCanchas(datos.dias, datos.lluvias, datos.trabajos);
   if (!plano) return;
 
   raiz.appendChild(el('h2', {}, ['Uso de canchas']));
@@ -522,7 +656,8 @@ function graficoDeCanchas(raiz, datos) {
     }
 
     cuerpoGrafico.appendChild(el('p', { class: 'pista' }, [
-      'Cada punto sobre la línea es un partido de torneo, en el día que se jugó.',
+      'Cada punto sobre la línea es un partido de torneo, en el día que se jugó. '
+      + (plano.agua.length ? 'La franja azul es lluvia: cuanto más ancha, más milímetros.' : ''),
     ]));
   };
   pintar();

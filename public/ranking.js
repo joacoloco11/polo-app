@@ -23,11 +23,23 @@ const ranking = {
 
 const miFicha = { datos: null, error: null };
 
+const trabajoEnBlanco = () => ({
+  cancha: 1, tipo: 'arena', cantidad: '', nombre: '', unidad: '', fecha: hoy(),
+});
+const observacionEnBlanco = () => ({ canchas: [], fecha: hoy(), texto: '' });
+
 const canchas = {
   datos: null,
   error: null,
   alta: false,
+  abierta: null,          // qué cancha está desplegada
   nuevo: { nombre: '', tipo: 'copa', fecha: hoy(), hora: '11:00', cancha: 1, chukkers: 6 },
+  carga: {
+    abierta: null,        // lluvia | trabajo | observacion
+    lluvia: { fecha: hoy(), mm: '' },
+    trabajo: trabajoEnBlanco(),
+    observacion: observacionEnBlanco(),
+  },
 };
 
 /** Cuando se carga un resultado, lo que está en pantalla queda viejo. */
@@ -503,7 +515,7 @@ function vistaCanchas(raiz) {
     return;
   }
 
-  const { canchas: uso, torneos } = canchas.datos;
+  const { canchas: uso, torneos, trabajos, observaciones } = canchas.datos;
 
   if (!uso.length) {
     raiz.appendChild(el('div', { class: 'vacio' }, ['Todavía no se jugó en ninguna cancha.']));
@@ -514,9 +526,13 @@ function vistaCanchas(raiz) {
    * arriba de todo: así se compara una cancha contra el total sin cambiar de
    * forma de leer. El número grande son las veces que se usó —prácticas más
    * partidos— y abajo, los chukkers que se jugaron encima.
+   *
+   * Las canchas se tocan y se abren: adentro está lo que se le echó y lo que se
+   * anotó de ella.
    */
-  const renglon = ({ marca, titulo, practicas, partidos, total, chukkers, destacado }) =>
-    el('div', { class: 'card cancha-fila' + (destacado ? ' total' : '') }, [
+  const renglon = ({ marca, titulo, practicas, partidos, total, chukkers, destacado, cancha }) => {
+    const abierta = canchas.abierta === cancha;
+    const cuerpo = [
       el('div', { class: 'redondel' + (destacado ? ' rotulo' : '') }, [marca]),
       el('div', { style: 'flex:1;min-width:0' }, [
         el('b', {}, [titulo]),
@@ -530,7 +546,18 @@ function vistaCanchas(raiz) {
         el('em', {}, ['total']),
         el('div', { class: 'chico' }, [chukkers + ' chukkers']),
       ]),
-    ]);
+    ];
+    if (!cancha) return el('div', { class: 'card cancha-fila total' }, cuerpo);
+
+    cuerpo.push(icono(abierta ? 'arriba' : 'abajo', 15, 'flechita'));
+    return el('div', {}, [
+      el('button', {
+        type: 'button', class: 'card cancha-fila' + (abierta ? ' abierta' : ''),
+        onclick: () => { canchas.abierta = abierta ? null : cancha; render(); },
+      }, cuerpo),
+      abierta ? detalleDeCancha(cancha, trabajos, observaciones) : null,
+    ].filter(Boolean));
+  };
 
   if (uso.length) {
     raiz.appendChild(renglon({
@@ -545,7 +572,13 @@ function vistaCanchas(raiz) {
   }
 
   // De la más usada a la menos: la pregunta es cuál se está gastando.
-  uso.slice()
+  // Las canchas que nunca se usaron no salen en `uso`, pero pueden tener
+  // trabajos: una cancha parada porque la están arreglando merece su renglón.
+  const conTrabajo = [...new Set((trabajos || []).map((t) => Number(t.cancha)))]
+    .filter((c) => !uso.some((u) => Number(u.cancha) === c))
+    .map((cancha) => ({ cancha, practicas: 0, partidos: 0, total: 0, chukkers: 0 }));
+
+  uso.concat(conTrabajo)
     .sort((a, b) => b.total - a.total || b.chukkers - a.chukkers || a.cancha - b.cancha)
     .forEach((c) => raiz.appendChild(renglon({
       marca: String(c.cancha),
@@ -554,6 +587,7 @@ function vistaCanchas(raiz) {
       partidos: c.partidos,
       total: c.total,
       chukkers: c.chukkers,
+      cancha: Number(c.cancha),
     })));
 
   /* ---- cómo se repartió el uso a lo largo de la temporada */
@@ -592,19 +626,22 @@ function vistaCanchas(raiz) {
         : null,
     ]))));
 
-  if (estado.jugador.admin) raiz.appendChild(altaDeTorneoDelClub());
+  /* ---- las observaciones, abajo de todo */
+  if (observaciones && observaciones.length) {
+    raiz.appendChild(el('h2', {}, ['Observaciones']));
+    raiz.appendChild(el('div', {}, observaciones.map(unaObservacion)));
+  }
+
+  /* ---- y lo que se puede cargar, solo para administradores */
+  if (!estado.jugador.admin) return;
+  if (canchas.alta) {
+    raiz.appendChild(altaDeTorneoDelClub());
+    return;
+  }
+  raiz.appendChild(cargasDeCancha());
 }
 
 function altaDeTorneoDelClub() {
-  if (!canchas.alta) {
-    return el('div', { style: 'margin-top:18px' }, [
-      el('button', {
-        class: 'primary', type: 'button',
-        onclick: () => { canchas.alta = true; render(); },
-      }, ['Sumar un partido de torneo']),
-    ]);
-  }
-
   const nuevo = canchas.nuevo;
   const campo = (etiqueta, control) =>
     el('label', { class: 'campo' }, [el('span', {}, [etiqueta]), control]);
@@ -654,5 +691,214 @@ function altaDeTorneoDelClub() {
         onclick: () => { canchas.alta = false; render(); },
       }, ['Cancelar']),
     ]),
+  ]);
+}
+
+/* ------------------------------------------- el estado de cada cancha */
+
+/**
+ * Lo que se despliega al tocar una cancha: cuánta arena y cuánto fertilizante
+ * se le echó en la temporada, cada trabajo con su fecha, y las observaciones
+ * que la mencionan.
+ */
+function detalleDeCancha(cancha, trabajos, observaciones) {
+  const suyos = (trabajos || []).filter((t) => Number(t.cancha) === cancha);
+  const suyas = (observaciones || []).filter((o) => (o.canchas || []).includes(cancha));
+  const arena = suyos.filter((t) => t.tipo === 'arena').reduce((a, t) => a + Number(t.cantidad), 0);
+  const fert = suyos.filter((t) => t.tipo === 'fertilizante').reduce((a, t) => a + Number(t.cantidad), 0);
+
+  const partes = [
+    el('div', { class: 'totales-trabajo' }, [
+      el('div', {}, [el('b', { class: 'arena' }, [enNumero(arena)]), el('span', {}, ['m³ de arena'])]),
+      el('div', {}, [el('b', { class: 'fert' }, [enNumero(fert)]), el('span', {}, ['kg de fertilizante'])]),
+    ]),
+  ];
+
+  if (suyos.length) {
+    partes.push(...suyos.map((t) => el('div', { class: 'trabajo' }, [
+      el('span', { class: 'cuando' }, [Hoja.fechaCorta(t.fecha)]),
+      el('span', { class: 'que ' + CLASE_TRABAJO[t.tipo] },
+        [t.tipo === 'otro' ? t.nombre : conMayuscula(t.tipo)]),
+      el('span', { class: 'cuanto ' + CLASE_TRABAJO[t.tipo] }, [enNumero(t.cantidad) + ' ' + t.unidad]),
+      estado.jugador.admin ? botonDeBorrar('trabajo', t.id, 'Borrar el trabajo') : null,
+    ].filter(Boolean))));
+  } else {
+    partes.push(el('p', { class: 'pista' }, ['Todavía no se le cargó ningún trabajo.']));
+  }
+
+  if (suyas.length) {
+    partes.push(el('p', { class: 'apartado', style: 'margin:14px 0 6px' }, ['Observaciones']));
+    partes.push(...suyas.map(unaObservacion));
+  }
+
+  return el('div', { class: 'desplegado' }, partes);
+}
+
+/** La cruz para sacar algo, con su confirmación. */
+function botonDeBorrar(que, id, cartel) {
+  return el('button', {
+    class: 'sacar', type: 'button', 'aria-label': cartel,
+    onclick: (e) => conBoton(e.target, async () => {
+      if (!window.confirm('¿' + cartel + '?')) return;
+      await pedir('/api/canchas?que=' + que + '&id=' + encodeURIComponent(id), { method: 'DELETE' });
+      await cargarCanchas();
+    }, canchas),
+  }, ['×']);
+}
+
+/** Una observación: de qué canchas habla, quién la escribió y qué dice. */
+function unaObservacion(o) {
+  return el('div', { class: 'obs' }, [
+    el('div', { class: 'obs-cabeza' }, [
+      el('span', { class: 'obs-canchas' }, (o.canchas || []).map((c) => el('span', {
+        style: 'background:' + COLOR_CANCHA[c] + ';color:' + tintaSobre(COLOR_CANCHA[c]),
+      }, ['C' + c]))),
+      el('b', {}, [o.autor]),
+      el('span', { class: 'cuando' }, [Hoja.fechaCorta(o.fecha)]),
+      estado.jugador.admin ? botonDeBorrar('observacion', o.id, 'Borrar la observación') : null,
+    ].filter(Boolean)),
+    el('p', {}, [o.texto]),
+  ]);
+}
+
+/** Lo que se carga en Canchas, cada cosa con su formulario. */
+function cargasDeCancha() {
+  const c = canchas.carga;
+
+  if (!c.abierta) {
+    return el('div', { class: 'acciones', style: 'margin-top:18px' }, [
+      el('button', {
+        class: 'primary', type: 'button',
+        onclick: () => { canchas.alta = true; render(); },
+      }, ['Sumar un partido de torneo']),
+      el('button', {
+        class: 'ghost', type: 'button',
+        onclick: () => { c.abierta = 'lluvia'; render(); },
+      }, ['Sumar un día de lluvia']),
+      el('button', {
+        class: 'ghost', type: 'button',
+        onclick: () => { c.abierta = 'trabajo'; render(); },
+      }, ['Sumar un trabajo de cancha']),
+      el('button', {
+        class: 'ghost', type: 'button',
+        onclick: () => { c.abierta = 'observacion'; render(); },
+      }, ['Escribir una observación']),
+    ]);
+  }
+
+  const campo = (etiqueta, control) =>
+    el('label', { class: 'campo' }, [el('span', {}, [etiqueta]), control]);
+  const cerrar = () => { c.abierta = null; render(); };
+  const guardar = (cuerpo, alGuardar) => el('div', { class: 'acciones' }, [
+    el('button', {
+      class: 'primary', type: 'button',
+      onclick: (e) => conBoton(e.target, async () => {
+        await pedir('/api/canchas', { method: 'POST', body: JSON.stringify(cuerpo()) });
+        alGuardar();
+        c.abierta = null;
+        await cargarCanchas();
+      }, canchas),
+    }, ['Guardar']),
+    el('button', { class: 'link', type: 'button', onclick: cerrar }, ['Cancelar']),
+  ]);
+
+  if (c.abierta === 'lluvia') {
+    return el('div', { class: 'card p', style: 'margin-top:18px' }, [
+      el('h2', { style: 'margin:0 0 12px' }, ['Un día de lluvia']),
+      campo('Fecha', el('input', {
+        type: 'date', value: c.lluvia.fecha,
+        onchange: (e) => { c.lluvia.fecha = e.target.value; },
+      })),
+      campo('Cuánto llovió', el('div', { class: 'con-unidad' }, [
+        el('input', {
+          type: 'number', value: c.lluvia.mm, min: 0, max: 500, inputmode: 'numeric',
+          oninput: (e) => { c.lluvia.mm = e.target.value; },
+        }),
+        el('em', {}, ['mm']),
+      ])),
+      el('p', { class: 'pista' }, [
+        'La lluvia es del club, no de una cancha: llueve sobre las seis. Si ese día '
+        + 'ya estaba cargado, se corrige.',
+      ]),
+      guardar(
+        () => ({ que: 'lluvia', fecha: c.lluvia.fecha, mm: c.lluvia.mm }),
+        () => { c.lluvia = { fecha: hoy(), mm: '' }; },
+      ),
+    ]);
+  }
+
+  if (c.abierta === 'trabajo') {
+    const t = c.trabajo;
+    return el('div', { class: 'card p', style: 'margin-top:18px' }, [
+      el('h2', { style: 'margin:0 0 12px' }, ['Un trabajo de cancha']),
+      campo('Qué cancha', el('div', { class: 'chips tres' }, [1, 2, 3, 4, 5, 6].map((n) =>
+        el('button', {
+          type: 'button', class: 'chip', 'aria-pressed': t.cancha === n,
+          onclick: () => { t.cancha = n; render(); },
+        }, [String(n)])))),
+      campo('Qué se hizo', el('div', { class: 'chips tres' },
+        [['arena', 'Arena'], ['fertilizante', 'Fertilizante'], ['otro', 'Otro']].map(([clave, texto]) =>
+          el('button', {
+            type: 'button', class: 'chip', 'aria-pressed': t.tipo === clave,
+            onclick: () => { t.tipo = clave; render(); },
+          }, [texto])))),
+      // Arena y fertilizante ya saben en qué se miden. "Otro" no puede saberlo
+      // —lo mismo entra cal que horas de rolo— y por eso pide dos cosas más.
+      t.tipo === 'otro'
+        ? campo('Cómo se llama', el('input', {
+          type: 'text', value: t.nombre, placeholder: 'Ej.: Resembrado, cal, rolo',
+          oninput: (e) => { t.nombre = e.target.value; },
+        }))
+        : null,
+      campo(t.tipo === 'otro' ? 'Cuánto y en qué unidad' : 'Cuánto', el('div', { class: 'con-unidad' }, [
+        el('input', {
+          type: 'number', value: t.cantidad, min: 0, step: 'any', inputmode: 'decimal',
+          oninput: (e) => { t.cantidad = e.target.value; },
+        }),
+        t.tipo === 'otro'
+          ? el('input', {
+            type: 'text', value: t.unidad, placeholder: 'kg', maxlength: 8,
+            style: 'max-width:84px',
+            oninput: (e) => { t.unidad = e.target.value; },
+          })
+          : el('em', {}, [UNIDAD_FIJA[t.tipo]]),
+      ])),
+      campo('Fecha', el('input', {
+        type: 'date', value: t.fecha,
+        onchange: (e) => { t.fecha = e.target.value; },
+      })),
+      guardar(
+        () => ({ que: 'trabajo', ...t }),
+        () => { c.trabajo = trabajoEnBlanco(); },
+      ),
+    ].filter(Boolean));
+  }
+
+  const o = c.observacion;
+  return el('div', { class: 'card p', style: 'margin-top:18px' }, [
+    el('h2', { style: 'margin:0 0 12px' }, ['Una observación']),
+    campo('Sobre qué canchas', el('div', { class: 'chips tres' }, [1, 2, 3, 4, 5, 6].map((n) =>
+      el('button', {
+        type: 'button', class: 'chip', 'aria-pressed': o.canchas.includes(n),
+        onclick: () => {
+          o.canchas = o.canchas.includes(n) ? o.canchas.filter((x) => x !== n) : o.canchas.concat(n);
+          render();
+        },
+      }, [String(n)])))),
+    campo('Fecha', el('input', {
+      type: 'date', value: o.fecha,
+      onchange: (e) => { o.fecha = e.target.value; },
+    })),
+    // El texto de un `textarea` va adentro, no en un atributo `value`.
+    campo('Qué pasó', el('textarea', {
+      rows: 4, maxlength: 1200,
+      placeholder: 'Después de los 140 mm quedaron dos lagunas en el sector de palenques…',
+      oninput: (e) => { o.texto = e.target.value; },
+    }, [o.texto])),
+    el('p', { class: 'pista' }, ['Firma ' + estado.jugador.apodo + ', que sos vos.']),
+    guardar(
+      () => ({ que: 'observacion', fecha: o.fecha, texto: o.texto, canchas: o.canchas }),
+      () => { c.observacion = observacionEnBlanco(); },
+    ),
   ]);
 }

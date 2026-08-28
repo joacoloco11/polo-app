@@ -579,6 +579,64 @@
     display: inline-block; width: 10px; height: 10px; border-radius: 3px;
     margin-right: 7px; vertical-align: -1px;
   }
+  .banda-lluvia { fill: #2a78d6; opacity: .22; }
+  .mm-lluvia { fill: #2a78d6; font-weight: 700; font-size: 10px; font-family: var(--sans); }
+  .sub-total {
+    display: block; font-size: 10.5px; font-weight: 600; margin-top: 2px;
+    text-transform: none; letter-spacing: 0;
+  }
+  .parcial { display: block; font-size: 10.5px; font-weight: 600; margin-top: 1px; }
+  .fila-lluvia td { color: #2a78d6; font-weight: 600; }
+  .fila-lluvia td:first-child {
+    color: var(--muted); font-weight: 700; font-size: 11px;
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+  /* Los dos trabajos que el club hace siempre, en colores que se leen sobre
+     blanco: 5,9:1 el marrón de la arena y 7,1:1 el verde del fertilizante. */
+  .arena { color: #8a5a2b; }
+  .fert { color: #166534; }
+  .otro-trabajo { color: var(--muted); }
+
+  /* --- el estado de cada cancha --- */
+  .cancha-fila.abierta {
+    border-color: var(--teal); margin-bottom: 0;
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  }
+  .cancha-fila .flechita { color: var(--muted); flex-shrink: 0; }
+  .desplegado {
+    border: 1px solid var(--teal); border-top: 0; border-radius: 0 0 14px 14px;
+    background: var(--surface); padding: 12px 14px 10px; margin-bottom: 8px;
+  }
+  .totales-trabajo { display: flex; gap: 18px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  .totales-trabajo > div { display: flex; align-items: baseline; gap: 5px; }
+  .totales-trabajo b { font-size: 19px; font-weight: 700; }
+  .totales-trabajo span { font-size: 11px; color: var(--muted); }
+  .trabajo { display: flex; align-items: baseline; gap: 8px; padding: 7px 0; font-size: 13px; }
+  .trabajo + .trabajo { border-top: 1px solid var(--linea-suave); }
+  .trabajo .cuando { color: var(--muted); font-size: 12px; width: 62px; flex: none; }
+  .trabajo .que { flex: 1; min-width: 0; }
+  .trabajo .cuanto { font-weight: 700; }
+
+  /* --- las observaciones --- */
+  .obs {
+    border: 1px solid var(--line); border-radius: 12px; background: var(--ground);
+    padding: 11px 13px; margin-bottom: 8px;
+  }
+  .obs-cabeza { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .obs-cabeza b { font-family: var(--serif); font-size: 14px; font-weight: 600; }
+  .obs-cabeza .cuando { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .obs-canchas { display: flex; gap: 4px; }
+  .obs-canchas span {
+    font-size: 10.5px; font-weight: 700; border-radius: 5px; padding: 2px 6px; line-height: 1.5;
+  }
+  .obs p { margin: 0; font-size: 13.5px; color: var(--ink); white-space: pre-wrap; }
+  .campo textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 12px;
+    font: inherit; font-size: 15px; color: var(--ink); min-height: 92px; resize: vertical;
+  }
+  .con-unidad { display: flex; align-items: center; gap: 8px; }
+  .con-unidad input { flex: 1; min-width: 0; }
+  .con-unidad em { font-style: normal; color: var(--muted); font-size: 13px; white-space: nowrap; }
 
   /* El marcador del partido de torneo, en el alta. */
   .marcador-alta { display: flex; align-items: center; gap: 8px; }
