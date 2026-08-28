@@ -495,11 +495,13 @@ function altaDeTorneo() {
   }
 
   const t = caballos.torneo;
+  const corrigiendo = !!t.id;
   const campo = (etiqueta, control) =>
     el('label', { class: 'campo' }, [el('span', {}, [etiqueta]), control]);
 
   return el('div', { class: 'card p', style: 'margin-top:14px' }, [
-    el('h2', { style: 'margin:0 0 12px' }, ['Un partido de torneo']),
+    el('h2', { style: 'margin:0 0 12px' },
+      [corrigiendo ? 'Corregir el partido' : 'Un partido de torneo']),
 
     campo('Quién lo organiza', el('div', { class: 'chips tres' }, ORGANIZADORES.map(([clave, texto]) =>
       el('button', {
@@ -581,6 +583,7 @@ function altaDeTorneo() {
           const r = await pedir('/api/jornadas', {
             method: 'POST',
             body: JSON.stringify({
+              id: t.id || undefined,
               nombre: t.nombre,
               fecha: t.fecha,
               chukkers: t.chukkers,
@@ -598,14 +601,37 @@ function altaDeTorneo() {
           caballos.altaTorneo = false;
           caballos.torneo = torneoEnBlanco();
           await cargarJornadas();
-          caballos.elegido = r.jornada.id;   // se abre en el partido recién cargado
+          caballos.elegido = r.jornada.id;   // se abre en el partido que se acaba de tocar
+          refrescarFicha();
         }, caballos),
-      }, ['Guardar el partido']),
+      }, [corrigiendo ? 'Guardar los cambios' : 'Guardar el partido']),
       el('button', {
         class: 'link', type: 'button',
-        onclick: () => { caballos.altaTorneo = false; render(); },
+        onclick: () => {
+          caballos.altaTorneo = false;
+          caballos.torneo = torneoEnBlanco();
+          render();
+        },
       }, ['Cancelar']),
     ]),
+
+    // Borrar es la salida para el partido cargado dos veces o mal del todo.
+    corrigiendo
+      ? el('div', { style: 'text-align:center;margin-top:4px' }, [
+        el('button', {
+          class: 'link rojo', type: 'button',
+          onclick: (e) => conBoton(e.target, async () => {
+            if (!window.confirm('¿Borrar este partido? También se borran los caballos que le hayas cargado.')) return;
+            await pedir('/api/jornadas', { method: 'DELETE', body: JSON.stringify({ id: t.id }) });
+            caballos.altaTorneo = false;
+            caballos.torneo = torneoEnBlanco();
+            caballos.elegido = null;
+            await cargarJornadas();
+            refrescarFicha();
+          }, caballos),
+        }, ['Borrar el partido']),
+      ])
+      : null,
   ].filter(Boolean));
 }
 
@@ -892,10 +918,11 @@ function vistaCaballos(raiz) {
 /* ===========================================================================
    El calendario de la caballada.
 
-   Una fila por caballo y una columna por jornada. Cada celda dice si ese día
-   jugó y, cuando tiene puntaje, cuánto: más oscuro es mejor. La fila de cada
-   caballo va desde la primera práctica que jugó hasta la última, y las jornadas
-   en las que no salió ninguno quedan como una rayita, que ocupan menos.
+   Una fila por caballo y una columna por día del calendario. Cada celda dice si
+   ese día jugó y, cuando tiene puntaje, cuánto: más oscuro es mejor. La fila de
+   cada caballo va desde la primera práctica que jugó hasta la última, y los días
+   en los que no salió ninguno —haya habido práctica o no— quedan como una
+   rayita: se cuentan con el ojo y casi no ocupan ancho.
 
    La línea roja cruza los cuadraditos por el medio y marca cada período en que
    estuvo lesionado.
@@ -941,14 +968,42 @@ function formaDeCelda(celda) {
 }
 
 /**
+ * Mete, entre las jornadas, un renglón vacío por cada día del calendario en el
+ * que no se jugó. Dos prácticas el mismo día siguen siendo dos columnas.
+ */
+function diaPorDia(jornadas) {
+  const conFecha = {};
+  jornadas.forEach((ev) => { (conFecha[ev.fecha] = conFecha[ev.fecha] || []).push(ev); });
+
+  const columnas = [];
+  const dia = new Date(jornadas[0].fecha + 'T12:00:00Z');
+  const ultimo = jornadas[jornadas.length - 1].fecha;
+  for (let vueltas = 0; vueltas < 800; vueltas += 1) {
+    const fecha = dia.toISOString().slice(0, 10);
+    if (conFecha[fecha]) columnas.push(...conFecha[fecha]);
+    else columnas.push({ fecha, vacio: true, misChukkers: [], uso: {}, puntajes: {} });
+    if (fecha >= ultimo) break;
+    dia.setUTCDate(dia.getUTCDate() + 1);
+  }
+  return columnas;
+}
+
+/**
  * El plano del calendario: qué filas, qué columnas y dónde va cada cosa.
  * Lo arman una sola vez la pantalla y la exportación, así los dos dibujan
  * exactamente lo mismo.
  */
 function planoDelCalendario(stats, medidas) {
-  const eventos = (caballos.eventos || [])
+  const jornadas = (caballos.eventos || [])
     .slice()
     .sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
+
+  // Las columnas son los días del calendario, no las jornadas: entre una
+  // práctica y la siguiente pasan días en los que no se jugó, y esos días son
+  // justamente lo que hay que ver —un caballo que descansó una semana no es lo
+  // mismo que uno que descansó una tarde—. Cada día sin jornada entra como una
+  // rayita de un píxel: se distinguen, y casi no ocupan.
+  const eventos = jornadas.length ? diaPorDia(jornadas) : [];
 
   // Los que jugaron, y también los lesionados que no jugaron nada: que un
   // caballo esté parado es exactamente lo que este cuadro tiene que mostrar.
@@ -992,20 +1047,22 @@ function planoDelCalendario(stats, medidas) {
     };
   });
 
-  // Una jornada en la que no salió ningún caballo no merece una columna entera:
-  // queda como una rayita y deja lugar para las que sí cuentan.
+  // Un día en el que no salió ningún caballo —haya habido práctica o no— no
+  // merece una columna entera: queda como una rayita y deja lugar para las que
+  // sí cuentan.
   const conJuego = eventos.map((_, c) => filas.some((f) => f.celdas[c].chukkers > 0));
 
-  const { etiqueta, celda, hueco, angosta, fila, eje } = medidas;
+  const { etiqueta, celda, hueco, angosta, huecoRaya, fila, eje } = medidas;
   const x = [];
   let corre = 0;
   eventos.forEach((_, c) => {
     x.push(corre);
-    corre += (conJuego[c] ? celda + hueco : angosta + hueco);
+    corre += (conJuego[c] ? celda + hueco : angosta + huecoRaya);
   });
 
   return {
     eventos, filas, conJuego, x,
+    jornadas: jornadas.length,
     anchoGrilla: corre,
     ancho: etiqueta + corre,
     alto: filas.length * fila + eje,
@@ -1053,7 +1110,11 @@ function muestraDeTorneo(medio) {
 
 /* ------------------------------------------------------------- en pantalla */
 
-const MEDIDAS = { etiqueta: 74, celda: 14, hueco: 4, angosta: 6, fila: 24, eje: 20 };
+/* `angosta` y `huecoRaya` son el ancho de la rayita de un día sin jugar y lo que
+   la separa de la siguiente: juntas dan el paso con el que corre el calendario
+   en los tramos sin polo. Tres píxeles por día alcanzan para contarlos con el
+   ojo y no le comen ancho a los cuadraditos. */
+const MEDIDAS = { etiqueta: 74, celda: 14, hueco: 4, angosta: 1, huecoRaya: 2, fila: 24, eje: 20 };
 
 function grafico(raiz, stats) {
   const plano = planoDelCalendario(stats, MEDIDAS);
@@ -1065,8 +1126,8 @@ function grafico(raiz, stats) {
   raiz.appendChild(el('h2', {}, ['Cómo viene cada caballo']));
   raiz.appendChild(el('p', { class: 'pista', style: 'margin-bottom:10px' }, [
     'La fila de cada caballo va desde la primera práctica que jugó hasta la última. '
-    + 'Las jornadas en las que no salió ninguno quedan como una rayita. '
-    + 'Deslizá de costado para ver toda la temporada.',
+    + 'Cada día que pasó sin que saliera ninguno queda como una rayita, para que se '
+    + 'vea el descanso. Deslizá de costado para ver toda la temporada.',
   ]));
 
   const nodo = (tag, attrs, hijos) => {
@@ -1085,7 +1146,21 @@ function grafico(raiz, stats) {
     width: plano.anchoGrilla, height: plano.alto,
     viewBox: '0 0 ' + plano.anchoGrilla + ' ' + plano.alto,
     role: 'img', class: 'grilla',
-    'aria-label': 'Calendario de ' + filas.length + ' caballos en ' + eventos.length + ' jornadas.',
+    'aria-label': 'Calendario de ' + filas.length + ' caballos en ' + plano.jornadas + ' jornadas.',
+  });
+
+  // Las rayitas van primero, abajo de todo: son el fondo del calendario. Si se
+  // dibujaran al final, le cortarían la barra roja de las lesiones y la
+  // dejarían punteada.
+  eventos.forEach((ev, c) => {
+    if (conJuego[c]) return;
+    const raya = nodo('rect', {
+      x: x[c], y: 0,
+      width: M.angosta, height: filas.length * M.fila - (M.fila - M.celda), fill: BORDE_VACIA,
+    });
+    raya.appendChild(nodo('title', {}, [])).textContent = Hoja.fechaCorta(ev.fecha) + ' · '
+      + (ev.vacio ? 'no se jugó' : 'no salió ningún caballo');
+    svg.appendChild(raya);
   });
 
   filas.forEach((fila, i) => {
@@ -1144,18 +1219,6 @@ function grafico(raiz, stats) {
     });
   });
 
-  // Las rayitas de los días que pasaron sin que jugara ninguno.
-  eventos.forEach((ev, c) => {
-    if (conJuego[c]) return;
-    const raya = nodo('rect', {
-      x: x[c] + M.angosta / 2 - 0.5, y: 0,
-      width: 1, height: filas.length * M.fila - (M.fila - M.celda), fill: BORDE_VACIA,
-    });
-    raya.appendChild(nodo('title', {}, [])).textContent =
-      Hoja.fechaCorta(ev.fecha) + ' · no salió ningún caballo';
-    svg.appendChild(raya);
-  });
-
   // El eje: una fecha cada tanto, sin repetir ni encimarse.
   const ejeY = filas.length * M.fila + 13;
   let ultima = null;
@@ -1197,7 +1260,7 @@ function grafico(raiz, stats) {
   raiz.appendChild(el('div', { class: 'referencia' }, [
     llave(SIN_PUNTAJE, 'jugó sin puntaje'),
     llave(CELDA_VACIA, 'no jugó', BORDE_VACIA),
-    llave(BORDE_VACIA, 'no salió ninguno', null, 'rayita'),
+    llave(BORDE_VACIA, 'día sin jugar', null, 'rayita'),
     llave(COLOR_LESION, 'lesionado', null, 'barra'),
   ]));
   raiz.appendChild(el('div', { class: 'referencia' }, [
@@ -1224,7 +1287,9 @@ function grafico(raiz, stats) {
    mira en el celular de otro, así que los cuadraditos tienen que aguantar la
    compresión y el zoom. El plano lo arma la misma función, con estas medidas:
    la pantalla y el JPG dibujan siempre lo mismo. */
-const MEDIDAS_JPG = { etiqueta: 300, celda: 30, hueco: 10, angosta: 12, fila: 46, eje: 46 };
+const MEDIDAS_JPG = {
+  etiqueta: 300, celda: 30, hueco: 10, angosta: 3, huecoRaya: 5, fila: 46, eje: 46,
+};
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -1280,7 +1345,7 @@ function calendarioEnCanvas(stats) {
   ctx.fillText(
     rangoDeFechas(eventos[0].fecha, eventos[eventos.length - 1].fecha)
     + '  ·  ' + filas.length + (filas.length === 1 ? ' caballo' : ' caballos')
-    + '  ·  ' + eventos.length + (eventos.length === 1 ? ' jornada' : ' jornadas'),
+    + '  ·  ' + plano.jornadas + (plano.jornadas === 1 ? ' jornada' : ' jornadas'),
     margen, 140,
   );
 
@@ -1316,7 +1381,7 @@ function calendarioEnCanvas(stats) {
   eventos.forEach((_, c) => {
     if (conJuego[c]) return;
     ctx.fillStyle = BORDE_VACIA;
-    ctx.fillRect(Math.round(x0 + x[c] + M.angosta / 2), y0, 2, grillaAlto - (M.fila - M.celda));
+    ctx.fillRect(Math.round(x0 + x[c]), y0, M.angosta, grillaAlto - (M.fila - M.celda));
   });
 
   /* ---- cada caballo: su nombre, sus cuadraditos y sus lesiones */
@@ -1447,7 +1512,7 @@ function referenciaEnCanvas(ctx, x, y, ancho) {
     { texto: '9 y 10', color: RAMPA_PUNTAJE[3] },
     { texto: 'jugó sin puntaje', color: SIN_PUNTAJE },
     { texto: 'no jugó', color: CELDA_VACIA, borde: BORDE_VACIA },
-    { texto: 'no salió ninguno', color: BORDE_VACIA, forma: 'rayita' },
+    { texto: 'día sin jugar', color: BORDE_VACIA, forma: 'rayita' },
     { texto: 'lesionado', color: COLOR_LESION, forma: 'barra' },
     { texto: 'torneo', color: RAMPA_PUNTAJE[2], forma: 'torneo' },
     { texto: 'medio chukker', color: RAMPA_PUNTAJE[2], forma: 'medio' },

@@ -36,6 +36,9 @@ let rankingSucio = false;
 /** Cuál de las dos listas de "con quiénes juega" está a la vista. */
 let conQuien = 'companeros';   // companeros | cancha
 
+/** Qué se muestra en "Lo que jugó". */
+let queMuestro = 'todo';       // todo | practicas | torneos
+
 /** 3 en vez de 3,0 — pero 1,5 cuando hay medios. */
 const puntos = (n) => (Number.isInteger(n) ? String(n) : Number(n).toFixed(1).replace('.', ','));
 
@@ -81,6 +84,15 @@ async function abrirJugador(id, donde) {
     else ranking.error = e.message;
   }
   render();
+}
+
+/**
+ * Después de tocar un partido de torneo la ficha quedó vieja: los números de
+ * arriba y la lista salen del servidor, así que se vuelven a pedir.
+ */
+function refrescarFicha() {
+  if (miFicha.datos) abrirJugador(miFicha.datos.jugador.id, 'mi');
+  if (ranking.abierta) abrirJugador(ranking.abierta.jugador.id, 'ranking');
 }
 
 function vistaRanking(raiz) {
@@ -312,10 +324,18 @@ function dibujarFicha(raiz, datos, volver) {
     ]));
   }
 
-  /* ---- canchas */
+  const torneos = datos.torneos || [];
+
+  /* ---- canchas: las prácticas y también los torneos jugados de local, que se
+     jugaron en una cancha del club igual que cualquier práctica */
   const suyas = {};
   jugadas.forEach((p) => { suyas[p.cancha] = (suyas[p.cancha] || 0) + 1; });
+  torneos.forEach((t) => {
+    if (!t.deLocal || !t.cancha) return;
+    suyas[t.cancha] = (suyas[t.cancha] || 0) + 1;
+  });
   const porCancha = Object.entries(suyas).sort((a, b) => b[1] - a[1]);
+  const enCancha = porCancha.reduce((a, [, veces]) => a + veces, 0);
 
   if (porCancha.length) {
     raiz.appendChild(el('h2', {}, ['Canchas']));
@@ -323,21 +343,33 @@ function dibujarFicha(raiz, datos, volver) {
       el('div', { class: 'cancha' }, [
         el('b', {}, ['C' + cancha]),
         el('span', {}, [veces + 'x']),
-        el('em', {}, [Math.round(veces / jugadas.length * 100) + '%']),
+        el('em', {}, [Math.round(veces / enCancha * 100) + '%']),
       ]))));
   }
 
-  /* ---- historial: cada práctica lleva a su planilla */
   /* ---- lo que jugó: prácticas y partidos de torneo, mezclados por fecha */
-  const torneos = datos.torneos || [];
   const todo = [
     ...jugadas.map((p) => ({ tipo: 'practica', fecha: p.fecha, dato: p })),
     ...torneos.map((t) => ({ tipo: 'torneo', fecha: t.fecha, dato: t })),
   ].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
 
-  raiz.appendChild(el('h2', {}, ['Lo que jugó (' + todo.length + ')']));
-  raiz.appendChild(el('div', { class: 'lista tabla' }, todo.map((x) =>
-    (x.tipo === 'practica' ? renglonDePractica(x.dato, jugador) : renglonDeTorneo(x.dato)))));
+  // Con muchas prácticas la lista es larga; el interruptor deja ver una cosa
+  // por vez sin tener que bajar buscando.
+  const visibles = todo.filter((x) => queMuestro === 'todo'
+    || (queMuestro === 'practicas' ? x.tipo === 'practica' : x.tipo === 'torneo'));
+
+  raiz.appendChild(el('h2', {}, ['Lo que jugó (' + visibles.length + ')']));
+  if (torneos.length) {
+    raiz.appendChild(el('div', { class: 'chips', style: 'margin-bottom:8px' }, [
+      ['todo', 'Todo'], ['practicas', 'Prácticas'], ['torneos', 'Torneos'],
+    ].map(([clave, texto]) => el('button', {
+      type: 'button', class: 'chip', 'aria-pressed': queMuestro === clave,
+      onclick: () => { queMuestro = clave; render(); },
+    }, [texto]))));
+  }
+
+  raiz.appendChild(el('div', { class: 'lista tabla' }, visibles.map((x) =>
+    (x.tipo === 'practica' ? renglonDePractica(x.dato, jugador) : renglonDeTorneo(x.dato, datos)))));
 }
 
 /** Una práctica del club en la lista de la ficha. */
@@ -376,8 +408,12 @@ function fechaDeTorneo(iso) {
   return ano === String(new Date().getFullYear()) ? corta : corta + '/' + ano.slice(2);
 }
 
-/** Un partido de torneo en la misma lista, con el sello de su organizador. */
-function renglonDeTorneo(t) {
+/**
+ * Un partido de torneo en la misma lista, con el sello de su organizador. Es
+ * un botón: los carga el jugador a mano, así que tiene que poder corregirlos
+ * —una fecha mal, un resultado que se cargó después—.
+ */
+function renglonDeTorneo(t, datos) {
   // Los partidos viejos —los que se cargaron antes de que el formulario pidiera
   // todo esto— vienen con campos vacíos: cada dato entra solo si está.
   const donde = t.deLocal === null || t.deLocal === undefined
@@ -393,7 +429,14 @@ function renglonDeTorneo(t) {
   const gano = hayResultado && t.golesAFavor > t.golesEnContra;
   const empato = hayResultado && t.golesAFavor === t.golesEnContra;
 
-  return el('div', { class: 'quien estatico torneo-fila' }, [
+  // Solo el dueño del partido —o un admin— lo puede corregir.
+  const mio = datos && (datos.jugador.id === estado.jugador.id || estado.jugador.admin);
+
+  return el(mio ? 'button' : 'div', {
+    type: mio ? 'button' : null,
+    class: 'quien torneo-fila' + (mio ? '' : ' estatico'),
+    onclick: mio ? () => irACorregirTorneo(t) : null,
+  }, [
     el('span', { style: 'flex:1;min-width:0' }, [
       el('b', {}, [t.nombre]),
       el('span', {}, [fechaDeTorneo(t.fecha) + (detalle ? ' · ' + detalle : '')]),
@@ -411,6 +454,32 @@ function renglonDeTorneo(t) {
 function irALaPlanilla(id) {
   estado.vista = 'practicas';
   abrirPractica(id);
+}
+
+/**
+ * Corregir un partido se hace en el mismo formulario donde se carga, que ya
+ * sabe pedir todo: se salta a Caballos con los datos puestos.
+ */
+function irACorregirTorneo(t) {
+  caballos.torneo = {
+    id: t.id,
+    organizador: t.organizador || 'sd',
+    organizadorNombre: t.organizadorNombre || '',
+    nombre: t.nombre || '',
+    fecha: t.fecha,
+    hcpTorneo: t.hcpTorneo === null || t.hcpTorneo === undefined ? '' : String(t.hcpTorneo),
+    chukkers: t.chukkers || 6,
+    deLocal: t.deLocal !== false,
+    cancha: t.cancha || 1,
+    sede: t.sede || '',
+    golesAFavor: t.golesAFavor === null || t.golesAFavor === undefined ? '' : String(t.golesAFavor),
+    golesEnContra: t.golesEnContra === null || t.golesEnContra === undefined ? '' : String(t.golesEnContra),
+  };
+  caballos.altaTorneo = true;
+  caballos.sub = 'cargar';
+  caballos.buscando = false;
+  estado.vista = 'caballos';
+  render();
 }
 
 /* ------------------------------------------------------------- las canchas */
@@ -486,6 +555,9 @@ function vistaCanchas(raiz) {
       total: c.total,
       chukkers: c.chukkers,
     })));
+
+  /* ---- cómo se repartió el uso a lo largo de la temporada */
+  graficoDeCanchas(raiz, canchas.datos);
 
   /* ---- los partidos de torneo */
   raiz.appendChild(el('h2', {}, ['Partidos de torneo']));

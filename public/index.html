@@ -214,6 +214,9 @@
     padding: 14px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 50px;
   }
   button.peligro[disabled] { opacity: .5; cursor: not-allowed; }
+  /* Borrar, cuando no es la acción principal de la pantalla: sigue siendo un
+     enlace, pero en rojo para que no se toque de casualidad. */
+  button.link.rojo { color: var(--rojo); }
   .acciones { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
   .salir { text-align: center; margin-top: 26px; }
 
@@ -510,10 +513,72 @@
   .cumple.hoy svg, .cumple.hoy b { color: var(--rojo); }
   /* El día que alguien cumple, la solapa del plantel se pone en rojo. */
   .pestana .de-cumple { color: var(--rojo); }
-  /* Cuánto le movieron el handicap interno los resultados. */
-  .ajuste { font-size: 10.5px; font-weight: 700; min-width: 20px; text-align: right; flex-shrink: 0; }
+  /* Cuánto le movieron el handicap interno los resultados: la flecha con su
+     número a la izquierda, chica; el handicap de hoy a la derecha, grande. */
+  .ajuste {
+    display: inline-flex; align-items: center; gap: 2px;
+    font-size: 11px; font-weight: 700; flex-shrink: 0;
+  }
+  .ajuste b { font-weight: 700; font-variant-numeric: tabular-nums; }
   .ajuste.sube { color: #0f8a4a; }
   .ajuste.baja { color: var(--rojo); }
+  .hcp-actual {
+    font-size: 17px; font-weight: 600; color: var(--teal);
+    min-width: 34px; text-align: right; flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --- el gráfico de uso de canchas --- */
+  svg.grafico { display: block; width: 100%; height: auto; overflow: visible; }
+  .grafico .eje { font-size: 11px; fill: var(--muted); font-family: var(--sans); }
+  /* La primera semana de cada mes va marcada. Se llama "primero" y no "mes"
+     porque esa clase ya la usa el separador de la lista de prácticas, que va
+     en versalitas y en dorado. */
+  .grafico .eje.primero { font-weight: 700; fill: var(--ink); }
+  .grafico .grilla { stroke: var(--linea-suave); stroke-width: 1; }
+  .grafico .base { stroke: var(--line); stroke-width: 1; }
+  .grafico .linea { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .grafico .punto-partido { stroke: none; }
+
+  .refs-canchas { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 2px 10px; }
+  .ref-cancha { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+  .ref-cancha i { width: 14px; height: 3px; border-radius: 2px; display: block; }
+  .ref-cancha b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ref-cancha.apagada { opacity: .5; }
+
+  .renglon-cancha { display: flex; align-items: center; gap: 8px; padding: 2px 2px; }
+  .renglon-cancha + .renglon-cancha { border-top: 1px solid var(--linea-suave); }
+  .renglon-cancha.apagada .renglon-rotulo { color: var(--muted); }
+  .renglon-rotulo {
+    flex: none; width: 62px; display: flex; align-items: baseline; gap: 5px;
+    font-size: 12px; font-weight: 600; color: var(--ink);
+  }
+  .renglon-rotulo i { width: 9px; height: 9px; border-radius: 3px; display: block; flex: none; }
+  .renglon-rotulo b { margin-left: auto; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .renglon-cancha svg { flex: 1; min-width: 0; }
+  .renglon-eje { border-top: 0; }
+
+  /* El cuadro de números se corre para el costado; la columna de la cancha
+     queda clavada, que si no uno se pierde de qué renglón es cada número. */
+  .rodante { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .rodante table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
+  .rodante th, .rodante td {
+    padding: 7px 8px; text-align: right; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .rodante th:first-child, .rodante td:first-child {
+    text-align: left; position: sticky; left: 0; background: var(--ground); padding-left: 2px;
+  }
+  .rodante thead th {
+    font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--line);
+  }
+  .rodante tbody tr + tr td { border-top: 1px solid var(--linea-suave); }
+  .rodante tfoot td { border-top: 1px solid var(--line); font-weight: 700; }
+  .punto-cancha {
+    display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+    margin-right: 7px; vertical-align: -1px;
+  }
 
   /* El marcador del partido de torneo, en el alta. */
   .marcador-alta { display: flex; align-items: center; gap: 8px; }
@@ -556,6 +621,7 @@
 <script src="hoja.js"></script>
 <script src="comun.js"></script>
 <script src="caballos.js"></script>
+<script src="usocanchas.js"></script>
 <script src="ranking.js"></script>
 <script src="armar.js"></script>
 <script>

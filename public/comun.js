@@ -147,6 +147,33 @@ function flecha(posicion, alto) {
   return svg;
 }
 
+/**
+ * Cuánto le movieron los resultados el handicap interno, con una flecha en vez
+ * de un signo: para arriba en verde, para abajo en rojo. El signo `+2` obliga a
+ * leer; la flecha se entiende de un vistazo, que es lo que hace falta cuando se
+ * está repasando el plantel entero.
+ */
+function ajusteConFlecha(ajuste) {
+  const n = Number(ajuste) || 0;
+  if (!n) return null;
+  const sube = n > 0;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', 11);
+  svg.setAttribute('height', 12);
+  svg.setAttribute('viewBox', '0 0 11 12');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(ns, 'path');
+  p.setAttribute('d', sube ? 'M5.5 1L10 7.5H1z' : 'M5.5 11L1 4.5h9z');
+  svg.appendChild(p);
+
+  return el('span', {
+    class: 'ajuste ' + (sube ? 'sube' : 'baja'),
+    title: sube ? 'Subió ' + n + ' por resultados' : 'Bajó ' + Math.abs(n) + ' por resultados',
+  }, [svg, el('b', {}, [String(Math.abs(n))])]);
+}
+
 /* ------------------------------------------------- el sello del organizador */
 
 /**

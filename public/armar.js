@@ -861,13 +861,11 @@ function vistaPlantel(raiz) {
           + (j.fecha_nacimiento ? ' · cumple ' + diaYMes(j.fecha_nacimiento) : ''),
         ]),
       ]),
-      // El handicap con el que se arman los equipos: la base más lo que
-      // movieron los resultados.
-      el('span', { class: 'hcp teal' }, [hcp(j.hcp_efectivo)]),
-      j.ajuste
-        ? el('span', { class: 'ajuste ' + (j.ajuste > 0 ? 'sube' : 'baja') },
-          [(j.ajuste > 0 ? '+' : '') + j.ajuste])
-        : null,
+      // Primero la flecha con lo que le movieron los resultados y después, más
+      // grande y a la derecha, el handicap con el que hoy se arman los equipos:
+      // ese es el número que importa, el otro explica de dónde salió.
+      ajusteConFlecha(j.ajuste),
+      el('span', { class: 'hcp-actual' }, [hcp(j.hcp_efectivo)]),
     ].filter(Boolean)))));
 }
 
@@ -875,14 +873,17 @@ function vistaPlantel(raiz) {
 
 /* Las solapas, con su ícono dibujado arriba del texto: así entran más de
    ancho, y el dibujo se ve igual en todos los teléfonos. */
+/* El orden es el que pidió el club: primero lo que se mira todos los días
+   —el ranking y la ficha propia—, después los caballos, y las herramientas de
+   organizar al final. */
 const PESTANAS_ADMIN = [
-  ['armar', 'Armar'], ['practicas', 'Prácticas'], ['ranking', 'Ranking'],
-  ['jugador', 'Jugador'], ['canchas', 'Canchas'], ['caballos', 'Caballos'],
-  ['plantel', 'Plantel'],
+  ['ranking', 'Ranking'], ['jugador', 'Jugador'], ['caballos', 'Caballos'],
+  ['practicas', 'Prácticas'], ['armar', 'Armar'], ['plantel', 'Plantel'],
+  ['canchas', 'Canchas'],
 ];
 const PESTANAS_JUGADOR = [
-  ['practicas', 'Prácticas'], ['ranking', 'Ranking'], ['jugador', 'Jugador'],
-  ['caballos', 'Caballos'],
+  ['ranking', 'Ranking'], ['jugador', 'Jugador'], ['caballos', 'Caballos'],
+  ['practicas', 'Prácticas'],
 ];
 
 /** Lo que cada solapa necesita traído, la primera vez que se la mira. */
@@ -944,13 +945,15 @@ async function adentro(jugador, temporada, cumples) {
   estado.jugador = jugador;
   estado.temporada = temporada || null;
   estado.cumples = cumples || null;
-  estado.vista = jugador.admin ? 'armar' : 'practicas';
+  // La app abre en el ranking, que es la primera solapa y lo que más se mira.
+  estado.vista = 'ranking';
 
   document.getElementById('subtitulo').textContent = jugador.apodo;
   const chip = vaciar(document.getElementById('chip-admin'));
   if (jugador.admin) chip.appendChild(el('span', { class: 'pill admin' }, ['ADMIN']));
 
   render();
+  alEntrarA(estado.vista);
   if (jugador.admin) {
     try { await cargarPlantel(); } catch (e) { armado.error = e.message; }
     render();
