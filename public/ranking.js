@@ -23,8 +23,10 @@ const ranking = {
 
 const miFicha = { datos: null, error: null };
 
+// Un mismo camión de arena se reparte entre varias canchas el mismo día: por eso
+// el trabajo se carga sobre una o varias, igual que la observación.
 const trabajoEnBlanco = () => ({
-  cancha: 1, tipo: 'arena', cantidad: '', nombre: '', unidad: '', fecha: hoy(),
+  canchas: [], tipo: 'arena', cantidad: '', nombre: '', unidad: '', fecha: hoy(),
 });
 const observacionEnBlanco = () => ({ canchas: [], fecha: hoy(), texto: '' });
 
@@ -831,10 +833,13 @@ function cargasDeCancha() {
     const t = c.trabajo;
     return el('div', { class: 'card p', style: 'margin-top:18px' }, [
       el('h2', { style: 'margin:0 0 12px' }, ['Un trabajo de cancha']),
-      campo('Qué cancha', el('div', { class: 'chips tres' }, [1, 2, 3, 4, 5, 6].map((n) =>
+      campo('En qué canchas', el('div', { class: 'chips tres' }, [1, 2, 3, 4, 5, 6].map((n) =>
         el('button', {
-          type: 'button', class: 'chip', 'aria-pressed': t.cancha === n,
-          onclick: () => { t.cancha = n; render(); },
+          type: 'button', class: 'chip', 'aria-pressed': t.canchas.includes(n),
+          onclick: () => {
+            t.canchas = t.canchas.includes(n) ? t.canchas.filter((x) => x !== n) : t.canchas.concat(n);
+            render();
+          },
         }, [String(n)])))),
       campo('Qué se hizo', el('div', { class: 'chips tres' },
         [['arena', 'Arena'], ['fertilizante', 'Fertilizante'], ['otro', 'Otro']].map(([clave, texto]) =>
@@ -867,6 +872,14 @@ function cargasDeCancha() {
         type: 'date', value: t.fecha,
         onchange: (e) => { t.fecha = e.target.value; },
       })),
+      // Con más de una cancha marcada la cantidad se anota entera en cada una:
+      // conviene decirlo antes de guardar y no después.
+      t.canchas.length > 1
+        ? el('p', { class: 'pista' }, [
+          'Esa cantidad se anota entera en cada una de las ' + t.canchas.length
+          + ' canchas marcadas: quedan ' + t.canchas.length + ' cargas, una por cancha.',
+        ])
+        : null,
       guardar(
         () => ({ que: 'trabajo', ...t }),
         () => { c.trabajo = trabajoEnBlanco(); },

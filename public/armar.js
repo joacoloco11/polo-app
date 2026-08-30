@@ -708,6 +708,33 @@ const nuevo = {
   categoria: 'socio', invitado_por: '', abierto: false, error: null,
 };
 
+/**
+ * El jugador que se está corrigiendo. `id` es cuál está abierto —uno solo a la
+ * vez— y el resto es lo que se está escribiendo, que recién viaja al guardar:
+ * así se puede arrepentir sin haber tocado nada.
+ */
+const corrigiendo = { id: null, campos: null, error: null };
+
+function abrirCorreccion(j) {
+  if (corrigiendo.id === j.id) {
+    corrigiendo.id = null;
+    corrigiendo.campos = null;
+  } else {
+    corrigiendo.id = j.id;
+    corrigiendo.campos = {
+      nombre: j.nombre,
+      apodo: j.apodo,
+      hcp_interno: j.hcp_interno,
+      handicap: j.handicap,
+      categoria: j.categoria,
+      invitado_por: j.invitado_por_id || '',
+      activo: j.activo,
+    };
+  }
+  corrigiendo.error = null;
+  render();
+}
+
 /** '14/3' a partir de '1987-03-14'. El año del jugador no se muestra. */
 function diaYMes(iso) {
   const [, mes, dia] = String(iso).split('-').map(Number);
@@ -850,23 +877,124 @@ function vistaPlantel(raiz) {
     ]));
   }
 
-  raiz.appendChild(el('div', { class: 'lista tabla', style: 'margin-top:14px' },
-    estado.plantel.map((j) => el('div', { class: 'quien estatico' + (j.activo ? '' : ' apagado') }, [
-      el('span', { style: 'flex:1' }, [
-        el('b', {}, [j.apodo]),
-        el('span', {}, [
-          j.nombre + ' · ' + j.categoria
-          + (j.invitado_por ? ' de ' + j.invitado_por : '')
-          + (j.activado ? '' : ' · sin entrar todavía')
-          + (j.fecha_nacimiento ? ' · cumple ' + diaYMes(j.fecha_nacimiento) : ''),
-        ]),
-      ]),
-      // Primero la flecha con lo que le movieron los resultados y después, más
-      // grande y a la derecha, el handicap con el que hoy se arman los equipos:
-      // ese es el número que importa, el otro explica de dónde salió.
-      ajusteConFlecha(j.ajuste),
-      el('span', { class: 'hcp-actual' }, [hcp(j.hcp_efectivo)]),
-    ].filter(Boolean)))));
+  // Cada jugador se toca y se abre para corregirlo. La lista no puede ser una
+  // `.lista.tabla` con los renglones adentro, porque el formulario tiene que
+  // meterse entre dos: por eso cada uno va con su bloque propio.
+  raiz.appendChild(el('div', { class: 'lista tabla plantel', style: 'margin-top:14px' },
+    estado.plantel.map((j) => {
+      const abierto = corrigiendo.id === j.id;
+      return el('div', { class: 'renglon-plantel' }, [
+        el('button', {
+          type: 'button',
+          class: 'quien fila-jugador' + (j.activo ? '' : ' apagado') + (abierto ? ' abierta' : ''),
+          onclick: () => abrirCorreccion(j),
+        }, [
+          el('span', { style: 'flex:1' }, [
+            el('b', {}, [j.apodo]),
+            el('span', {}, [
+              j.nombre + ' · ' + j.categoria
+              + (j.invitado_por ? ' de ' + j.invitado_por : '')
+              + (j.activo ? '' : ' · dado de baja')
+              + (j.activado ? '' : ' · sin entrar todavía')
+              + (j.fecha_nacimiento ? ' · cumple ' + diaYMes(j.fecha_nacimiento) : ''),
+            ]),
+          ]),
+          // Primero la flecha con lo que le movieron los resultados y después,
+          // más grande y a la derecha, el handicap con el que hoy se arman los
+          // equipos: ese es el número que importa, el otro explica de dónde sale.
+          ajusteConFlecha(j.ajuste),
+          el('span', { class: 'hcp-actual' }, [hcp(j.hcp_efectivo)]),
+          icono(abierto ? 'arriba' : 'abajo', 15, 'flechita'),
+        ].filter(Boolean)),
+        abierto ? formularioDeCorreccion(j) : null,
+      ].filter(Boolean));
+    })));
+}
+
+/**
+ * Corregir un jugador que ya está.
+ *
+ * El HCP interno es el único número que se toca seguido, así que va primero y
+ * con el cartel que explica qué pasa al cambiarlo: el ajuste que se ganó
+ * jugando no se pierde, se recalcula solo sobre el número nuevo.
+ */
+function formularioDeCorreccion(j) {
+  const c = corrigiendo.campos;
+  const campo = (etiqueta, control, pista) =>
+    el('label', { class: 'campo' }, [
+      el('span', {}, [etiqueta]),
+      control,
+      pista ? el('em', { class: 'pista-campo' }, [pista]) : null,
+    ].filter(Boolean));
+
+  return el('div', { class: 'desplegado corregir' }, [
+    el('div', { class: 'grilla-2' }, [
+      campo('HCP interno', el('input', {
+        type: 'number', value: c.hcp_interno, min: -2, max: 10, step: 1, inputmode: 'numeric',
+        oninput: (e) => { c.hcp_interno = e.target.value; },
+      }), 'el del club'),
+      campo('HCP AAP', el('input', {
+        type: 'number', value: c.handicap, min: -2, max: 10, step: 1, inputmode: 'numeric',
+        oninput: (e) => { c.handicap = e.target.value; },
+      }), 'el oficial'),
+    ]),
+    // Lo que más se pregunta al cambiar un handicap, contestado antes de que lo
+    // pregunten: los resultados viejos no se tocan.
+    j.ajuste
+      ? el('p', { class: 'pista' }, [
+        'Hoy juega de ' + hcp(j.hcp_efectivo) + ': ' + hcp(j.hcp_interno)
+        + ' que le pusiste, ' + (j.ajuste > 0 ? 'más ' : 'menos ')
+        + Math.abs(j.ajuste) + ' que se ganó jugando. Si cambiás el de arriba, '
+        + 'eso que se ganó no se pierde: se vuelve a sumar sobre el número nuevo.',
+      ])
+      : null,
+    campo('Cómo va en la planilla', el('input', {
+      type: 'text', value: c.apodo, maxlength: 20,
+      oninput: (e) => { c.apodo = e.target.value; },
+    }), 'el apodo corto, el que entra en la planilla'),
+    campo('Nombre y apellido', el('input', {
+      type: 'text', value: c.nombre, maxlength: 60,
+      oninput: (e) => { c.nombre = e.target.value; },
+    })),
+    campo('Categoría', el('div', { class: 'chips tres' }, ['socio', 'temporario', 'invitado'].map((x) =>
+      el('button', {
+        type: 'button', class: 'chip', 'aria-pressed': c.categoria === x,
+        onclick: () => { c.categoria = x; render(); },
+      }, [x])))),
+    c.categoria === 'invitado'
+      ? campo('Quién lo invita', selectorDeJugador(c.invitado_por, (id) => { c.invitado_por = id; }))
+      : null,
+    // Baja, no borrado: sus prácticas, sus puntos y sus caballos quedan.
+    el('label', { class: 'campo tilde' }, [
+      el('input', {
+        type: 'checkbox', checked: !c.activo,
+        onchange: (e) => { c.activo = !e.target.checked; render(); },
+      }),
+      el('span', {}, ['Darlo de baja']),
+      el('em', {}, ['deja de aparecer para armar prácticas; no se borra nada de lo que jugó']),
+    ]),
+    corrigiendo.error ? aviso('mal', corrigiendo.error) : null,
+    el('div', { class: 'acciones' }, [
+      el('button', {
+        class: 'primary', type: 'button',
+        // `conBoton` deja el error en `corrigiendo.error` si algo falla, y en
+        // ese caso lo de abajo no corre: el formulario queda abierto con lo
+        // que se escribió, que es lo que uno quiere cuando le rebotan algo.
+        onclick: (e) => conBoton(e.target, async () => {
+          await pedir('/api/jugadores', {
+            method: 'POST',
+            body: JSON.stringify({ id: j.id, ...c }),
+          });
+          await cargarPlantel();
+          corrigiendo.id = null;
+          corrigiendo.campos = null;
+        }, corrigiendo),
+      }, ['Guardar']),
+      el('button', {
+        class: 'link', type: 'button', onclick: () => abrirCorreccion(j),
+      }, ['Cancelar']),
+    ]),
+  ].filter(Boolean));
 }
 
 /* ----------------------------------------------------------------- marco */

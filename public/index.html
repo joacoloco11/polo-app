@@ -135,6 +135,32 @@
   .lista.tabla > .quien { border: none; border-radius: 0; border-bottom: 1px solid var(--linea-suave); min-height: 50px; }
   .lista.tabla > .quien:last-child { border-bottom: none; }
   .lista.tabla > .quien.puesto { border-left: 3px solid transparent; }
+
+  /* --- el plantel: cada jugador se toca y se abre para corregirlo --- */
+  /* El renglón dejó de ser hijo directo de la lista —abajo le cuelga el
+     formulario—, así que la línea que los separa se la pone él. */
+  .lista.tabla.plantel > .renglon-plantel:not(:last-child) { border-bottom: 1px solid var(--linea-suave); }
+  /* Va con el nombre de la lista adelante para ganarle a `.quien`, que define
+     su borde y su redondeo más abajo: acá el renglón no es una tarjeta. */
+  .lista.tabla.plantel .fila-jugador {
+    width: 100%; min-height: 50px; border: none; border-radius: 0; background: none;
+    font: inherit; color: inherit; text-align: left;
+  }
+  .lista.tabla.plantel .fila-jugador.abierta { background: rgba(0,137,122,.06); }
+  .fila-jugador .flechita { color: var(--muted); flex-shrink: 0; margin-left: 2px; }
+  .desplegado.corregir {
+    border: none; border-radius: 0; margin: 0;
+    background: var(--surface); padding: 14px;
+    border-top: 1px solid var(--linea-suave);
+  }
+  .desplegado.corregir .acciones { margin-top: 14px; }
+  /* La aclaración chica debajo de un casillero: para qué es ese número. */
+  .pista-campo { display: block; font-style: normal; font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+  /* Un tilde con su explicación al lado, no arriba: es una sola decisión. */
+  .campo.tilde { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .campo.tilde input { width: auto; flex: none; }
+  .campo.tilde > span { margin: 0; font-size: 13px; text-transform: none; letter-spacing: 0; }
+  .campo.tilde em { flex-basis: 100%; font-style: normal; font-size: 10.5px; color: var(--muted); margin-left: 24px; }
   .cabeza-tabla {
     display: flex; align-items: center; gap: 10px; padding: 7px 14px;
     background: var(--surface); border-bottom: 1px solid var(--line);
@@ -387,7 +413,12 @@
   .hcp-interno em { font-style: normal; font-size: 11px; color: var(--muted); flex: 1; text-align: right; }
 
   /* Canchas, con el redondel del número como en la v1. */
-  .cancha-fila { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-bottom: 8px; }
+  /* La cancha es un botón y el total un div: `width:100%` los deja exactamente
+     del mismo ancho. `text-align:left` porque un botón centra solo. */
+  .cancha-fila {
+    display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-bottom: 8px;
+    width: 100%; text-align: left; font: inherit; color: inherit;
+  }
   .cancha-fila b { font-family: var(--serif); font-size: 16px; font-weight: 600; }
   .redondel {
     width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; font-size: 20px; font-weight: 700;
