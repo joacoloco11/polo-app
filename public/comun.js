@@ -1,6 +1,17 @@
 /* Lo que usan todas las pantallas: crear elementos, hablar con el servidor y
    el estado de la sesión. */
 
+/**
+ * La versión de las pantallas. Su gemela del lado del servidor está en
+ * `lib/version.js`, y las dos se cambian juntas al publicar.
+ *
+ * Que estén separadas es a propósito: esta dice qué código tiene el celular y
+ * la otra qué código tiene el servidor. Si /api/diagnostico dice una versión y
+ * abajo de la pantalla se lee otra, el celular se quedó con el código viejo y
+ * lo único que hace falta es recargar.
+ */
+const VERSION = '2026.08.30';
+
 const estado = {
   jugador: null,     // quién entró
   temporada: null,   // la temporada activa

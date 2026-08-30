@@ -1062,6 +1062,9 @@ function render() {
       class: 'link', type: 'button',
       onclick: async () => { await pedir('/api/salir', { method: 'POST' }); location.reload(); },
     }, ['Salir de este teléfono']),
+    // La versión, chiquita. Sirve para una sola cosa, pero importante: saber si
+    // lo que estás mirando es lo último que se subió o quedó el código viejo.
+    el('div', { class: 'version' }, ['versión ' + VERSION]),
   ]));
 }
 

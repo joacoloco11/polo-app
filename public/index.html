@@ -245,6 +245,8 @@
   button.link.rojo { color: var(--rojo); }
   .acciones { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
   .salir { text-align: center; margin-top: 26px; }
+  /* Chiquita y apagada: está para consultarla, no para leerla. */
+  .salir .version { font-size: 10.5px; color: var(--muted); margin-top: 8px; letter-spacing: .3px; }
 
   /* Con siete pestañas no entran de frente en un celular: se deslizan, y el
      degradé del borde avisa que hay más. El ícono va arriba del texto para
@@ -706,13 +708,17 @@
   <div class="vacio">Cargando…</div>
 </main>
 
-<script src="logo.js"></script>
-<script src="hoja.js"></script>
-<script src="comun.js"></script>
-<script src="caballos.js"></script>
-<script src="usocanchas.js"></script>
-<script src="ranking.js"></script>
-<script src="armar.js"></script>
+<!-- El `?v=` es lo que hace que el celular baje el código nuevo en vez de usar
+     el que tenía guardado. Cambia con cada versión que se publica, junto con
+     `lib/version.js`. Sin esto, uno sube los archivos y sigue viendo la app
+     vieja hasta que se le ocurre limpiar el navegador. -->
+<script src="logo.js?v=2026.08.30"></script>
+<script src="hoja.js?v=2026.08.30"></script>
+<script src="comun.js?v=2026.08.30"></script>
+<script src="caballos.js?v=2026.08.30"></script>
+<script src="usocanchas.js?v=2026.08.30"></script>
+<script src="ranking.js?v=2026.08.30"></script>
+<script src="armar.js?v=2026.08.30"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */
 
