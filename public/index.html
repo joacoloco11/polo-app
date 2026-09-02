@@ -49,14 +49,30 @@
   .wrap { max-width: 640px; margin: 0 auto; padding: 0 14px 48px; }
   .hidden { display: none !important; }
 
+  /* El encabezado va en blanco y el gris baja a las solapas: arriba no se toca
+     nada, y las solapas —que son lo único que se toca todo el tiempo— quedan
+     marcadas como una barra. */
   header {
-    background: linear-gradient(135deg, var(--raised), var(--ground));
+    background: var(--ground);
     border-bottom: 1px solid var(--line);
   }
-  .head-in { max-width: 640px; margin: 0 auto; padding: 13px 14px; display: flex; align-items: center; gap: 11px; }
+  /* Todo apoya abajo, así el escudo y el nombre comparten piso sea cual sea el
+     tamaño del escudo. La pastilla de ADMIN es la excepción: va centrada. */
+  .head-in {
+    max-width: 640px; margin: 0 auto; padding: 13px 14px;
+    display: flex; align-items: flex-end; gap: 11px;
+  }
+  .head-in > #chip-admin { align-self: center; }
+  /* El escudo apoya en la misma línea que el nombre de abajo, no centrado
+     contra el bloque de texto.
+     Los 2.5px son lo que sobra debajo de las letras adentro de su renglón —el
+     aire que deja la interlínea más el lugar de las colas de las letras—: sin
+     eso el escudo se alinearía con la caja y quedaría 2.5px más abajo que la
+     última letra, que es lo que el ojo mira. */
   .mark {
-    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
-    background: #fff; object-fit: cover; border: 1px solid var(--line);
+    width: 40px; height: 40px; flex-shrink: 0; object-fit: cover;
+    /* 2.5px lo dejarían al ras de la última letra; con 0.5 baja 2 px de ahí. */
+    align-self: flex-end; margin-bottom: 0.5px;
   }
   .brand { flex: 1; }
   .brand b { display: block; font-family: var(--serif); color: var(--teal); letter-spacing: 1.5px; font-size: 16px; }
@@ -251,10 +267,20 @@
   /* Con siete pestañas no entran de frente en un celular: se deslizan, y el
      degradé del borde avisa que hay más. El ícono va arriba del texto para
      que cada una ocupe lo menos posible de ancho. */
-  .barra-pestanas { position: relative; border-bottom: 1px solid var(--line); margin: 4px 0 0; }
+  /* El gris que antes tenía el encabezado. Va pegado arriba, sin el margen que
+     lo separaba, para que se lea como una sola barra debajo del escudo. */
+  /* Los -14px comen el padding de `.wrap`: así el gris llega a los dos bordes
+     de la pantalla y la barra se lee entera, como el encabezado de arriba. */
+  .barra-pestanas {
+    position: relative; border-bottom: 1px solid var(--line); margin: 0 -14px;
+    background: var(--raised);
+  }
+  /* El degradé que avisa que la fila sigue: ahora se funde contra el gris de la
+     barra, no contra el blanco de la página. */
   .barra-pestanas::after {
     content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 30px;
-    pointer-events: none; background: linear-gradient(to right, rgba(255,255,255,0), var(--ground));
+    pointer-events: none;
+    background: linear-gradient(to right, rgba(238,242,248,0), var(--raised));
   }
   .pestanas {
     display: flex; gap: 0;
@@ -712,13 +738,13 @@
      el que tenía guardado. Cambia con cada versión que se publica, junto con
      `lib/version.js`. Sin esto, uno sube los archivos y sigue viendo la app
      vieja hasta que se le ocurre limpiar el navegador. -->
-<script src="logo.js?v=2026.08.30"></script>
-<script src="hoja.js?v=2026.08.30"></script>
-<script src="comun.js?v=2026.08.30"></script>
-<script src="caballos.js?v=2026.08.30"></script>
-<script src="usocanchas.js?v=2026.08.30"></script>
-<script src="ranking.js?v=2026.08.30"></script>
-<script src="armar.js?v=2026.08.30"></script>
+<script src="logo.js?v=2026.09.02"></script>
+<script src="hoja.js?v=2026.09.02"></script>
+<script src="comun.js?v=2026.09.02"></script>
+<script src="caballos.js?v=2026.09.02"></script>
+<script src="usocanchas.js?v=2026.09.02"></script>
+<script src="ranking.js?v=2026.09.02"></script>
+<script src="armar.js?v=2026.09.02"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */
 

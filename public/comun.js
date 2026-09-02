@@ -10,7 +10,7 @@
  * abajo de la pantalla se lee otra, el celular se quedó con el código viejo y
  * lo único que hace falta es recargar.
  */
-const VERSION = '2026.08.30';
+const VERSION = '2026.09.02';
 
 const estado = {
   jugador: null,     // quién entró
