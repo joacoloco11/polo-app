@@ -117,6 +117,24 @@ create index if not exists lesion_caballo_idx on lesion (caballo_id, desde desc)
 create unique index if not exists lesion_abierta_unica
   on lesion (caballo_id) where hasta is null;
 
+-- Chukkers que el caballo jugó FUERA de la práctica del club: en otro club, en
+-- un partido de otro, prestado a otro jinete. No hay planilla que los tenga,
+-- pero las patas del caballo sí, así que cuentan igual para la carga.
+--
+-- Cuelga del caballo y no de una jornada, porque justamente el día puede no
+-- tener jornada ninguna: son chukkers sueltos con su fecha.
+create table if not exists chukker_extra (
+  id         uuid primary key default gen_random_uuid(),
+  caballo_id uuid not null references caballo (id) on delete cascade,
+  fecha      date not null,
+  -- Medio chukker es medio: por eso decimal y no entero.
+  chukkers   numeric(3,1) not null check (chukkers > 0 and chukkers <= 12),
+  jinete     text,
+  creado_en  timestamptz not null default now()
+);
+
+create index if not exists chukker_extra_caballo_idx on chukker_extra (caballo_id, fecha desc);
+
 -- ---------------------------------------------------------------- prácticas
 
 create table if not exists practica (
@@ -588,6 +606,15 @@ drop policy if exists mi_caballada on caballo;
 create policy mi_caballada on caballo for all
   using (jugador_id = jugador_actual() or es_admin())
   with check (jugador_id = jugador_actual() or es_admin());
+
+-- Los chukkers de afuera son del dueño del caballo, igual que las lesiones.
+alter table chukker_extra enable row level security;
+drop policy if exists mis_extras on chukker_extra;
+create policy mis_extras on chukker_extra for all
+  using (exists (select 1 from caballo c where c.id = caballo_id
+                   and (c.jugador_id = jugador_actual() or es_admin())))
+  with check (exists (select 1 from caballo c where c.id = caballo_id
+                        and (c.jugador_id = jugador_actual() or es_admin())));
 
 drop policy if exists mis_lesiones on lesion;
 create policy mis_lesiones on lesion for all

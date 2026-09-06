@@ -20,6 +20,11 @@ const caballos = {
   eventos: null,        // mis prácticas y partidos, con lo cargado
   caballada: [],
   lesiones: [],         // los períodos de lesión, para pintarlos en el calendario
+  extras: [],           // los chukkers que la caballada jugó fuera del club
+  // Qué caballo tiene abierta la casilla extra y lo que se está escribiendo.
+  // Uno a la vez: son cuatro campos y no entran dos formularios en la pantalla.
+  extra: { caballoId: null, fecha: '', jinete: '', chukkers: '', error: null },
+  sueltos: false,       // la pantalla de cargar chukkers sin práctica
   elegido: null,        // la clave de la jornada abierta
   buscando: false,      // el buscador de jornadas anteriores
   filtro: '',
@@ -74,6 +79,7 @@ async function cargarJornadas() {
     caballos.eventos = r.eventos;
     caballos.caballada = r.caballos;
     caballos.lesiones = r.lesiones || [];
+    caballos.extras = r.extras || [];
     caballos.error = null;
     if (!caballos.eventos.some((e) => claveDe(e) === caballos.elegido)) {
       // Por defecto, la última donde figura: es casi siempre la que viene a cargar.
@@ -190,6 +196,12 @@ function selectorDeJornada(raiz) {
       class: 'link', type: 'button',
       onclick: () => { caballos.buscando = true; caballos.filtro = ''; render(); },
     }, ['Cargar otra práctica']));
+    // Un día sin práctica no tiene jornada de dónde colgarse, así que tiene su
+    // propia puerta: la misma caballada, sin los chukkers del club.
+    raiz.appendChild(el('button', {
+      class: 'link', type: 'button', style: 'display:block',
+      onclick: () => { caballos.sueltos = true; caballos.extra.caballoId = null; render(); },
+    }, ['Cargar chukkers sin práctica']));
     return;
   }
 
@@ -249,6 +261,187 @@ function selectorDeJornada(raiz) {
   dibujar();
 }
 
+/* ------------------------------------------ los chukkers jugados afuera */
+
+/**
+ * Un caballo puede haber jugado el mismo día en otro club, para otro jinete, o
+ * en un día en el que ni hubo práctica. Eso no está en ninguna planilla pero sí
+ * en las patas del caballo, así que cuenta igual para la carga.
+ */
+
+/** Los chukkers de afuera de un caballo, del más nuevo al más viejo. */
+const extrasDe = (caballoId) =>
+  (caballos.extras || []).filter((e) => e.caballo_id === caballoId);
+
+/** La casilla, al final de los chukkers de la práctica. */
+function casillaExtra(caballo) {
+  const abierta = caballos.extra.caballoId === caballo.id;
+  const cuantos = extrasDe(caballo.id).length;
+  return el('button', {
+    type: 'button', class: 'chuk extra',
+    'data-estado': abierta ? 'mio' : cuantos ? 'cargado' : 'libre',
+    'aria-pressed': abierta ? 'true' : 'false',
+    'aria-label': 'Chukkers de afuera de ' + caballo.nombre,
+    onclick: () => {
+      if (abierta) {
+        caballos.extra.caballoId = null;
+      } else {
+        // Se abre en blanco y con la fecha de hoy: lo más común es cargar lo
+        // de recién.
+        Object.assign(caballos.extra, {
+          caballoId: caballo.id, fecha: hoy(), jinete: '', chukkers: '', error: null,
+        });
+      }
+      render();
+    },
+  }, ['extra' + (cuantos ? ' · ' + cuantos : '')]);
+}
+
+/** El formulario, más lo que ya se cargó de ese caballo. */
+function panelExtra(caballo) {
+  const x = caballos.extra;
+  const campo = (etiqueta, control) =>
+    el('label', { class: 'campo' }, [el('span', {}, [etiqueta]), control]);
+
+  const guardar = async (boton) => {
+    x.error = null;
+    boton.disabled = true;
+    const original = boton.textContent;
+    boton.textContent = 'Un segundo…';
+    try {
+      await pedir('/api/caballos', {
+        method: 'POST',
+        body: JSON.stringify({
+          que: 'extra',
+          caballo_id: caballo.id,
+          fecha: x.fecha,
+          jinete: x.jinete,
+          chukkers: String(x.chukkers).replace(',', '.'),
+        }),
+      });
+      await cargarJornadas();
+      // Se deja abierto: cargar dos días seguidos del mismo caballo es lo
+      // normal cuando uno se acuerda de golpe de toda la semana.
+      Object.assign(x, { jinete: '', chukkers: '', error: null });
+    } catch (e) {
+      x.error = e.message;
+    }
+    boton.disabled = false;
+    boton.textContent = original;
+    render();
+  };
+
+  const cargados = extrasDe(caballo.id);
+
+  return el('div', { class: 'extra-panel' }, [
+    el('p', { class: 'pista', style: 'margin:0 0 10px' }, [
+      'Chukkers que jugó fuera de la práctica: en otro club, en un partido de otro, '
+      + 'o prestado a otro jinete.',
+    ]),
+    campo('Fecha', el('input', {
+      type: 'date', value: x.fecha,
+      onchange: (e) => { x.fecha = e.target.value; },
+    })),
+    el('div', { class: 'grilla-2' }, [
+      campo('Quién lo montó', el('input', {
+        type: 'text', value: x.jinete, maxlength: 60, placeholder: 'Opcional',
+        oninput: (e) => { x.jinete = e.target.value; },
+      })),
+      campo('Chukkers', el('input', {
+        type: 'number', value: x.chukkers, min: 0.5, max: 12, step: 0.5,
+        inputmode: 'decimal', placeholder: '2',
+        oninput: (e) => { x.chukkers = e.target.value; },
+      })),
+    ]),
+    x.error ? aviso('mal', x.error) : null,
+    el('div', { class: 'acciones' }, [
+      el('button', {
+        class: 'primary', type: 'button',
+        onclick: (e) => guardar(e.target),
+      }, ['Sumar los chukkers']),
+    ]),
+    // Lo ya cargado va acá abajo: es donde uno lo busca cuando se equivocó.
+    cargados.length
+      ? el('div', { class: 'extras-lista' }, [
+        el('p', { class: 'apartado', style: 'margin:14px 0 6px' }, ['Ya cargados']),
+        ...cargados.map((e) => unExtra(e, caballo)),
+      ])
+      : null,
+  ].filter(Boolean));
+}
+
+/** Un renglón de lo ya cargado, con su cruz para sacarlo. */
+function unExtra(e, caballo) {
+  return el('div', { class: 'extra-fila' }, [
+    el('b', {}, [Hoja.fechaCorta(e.fecha)]),
+    el('span', {}, [cantidad(e.chukkers) + (e.chukkers === 1 ? ' chukker' : ' chukkers')]),
+    e.jinete ? el('em', {}, [e.jinete]) : null,
+    el('button', {
+      class: 'sacar', type: 'button',
+      'aria-label': 'Borrar los chukkers del ' + Hoja.fechaCorta(e.fecha),
+      onclick: async (ev) => {
+        if (!window.confirm('¿Borrar los ' + cantidad(e.chukkers) + ' chukkers de '
+          + caballo.nombre + ' del ' + Hoja.fechaCorta(e.fecha).toLowerCase() + '?')) return;
+        ev.target.disabled = true;
+        try {
+          await pedir('/api/caballos?extra=' + encodeURIComponent(e.id), { method: 'DELETE' });
+          await cargarJornadas();
+        } catch (err) {
+          caballos.extra.error = err.message;
+          render();
+        }
+      },
+    }, ['×']),
+  ].filter(Boolean));
+}
+
+/**
+ * Cargar chukkers de un día en el que no hubo práctica.
+ *
+ * Es la misma caballada de siempre, sin los chukkers del club: cada caballo con
+ * su casilla extra nomás. Así no hay una pantalla nueva que aprender.
+ */
+function panelSueltos() {
+  const caja = el('div', {});
+  caja.appendChild(el('button', {
+    class: 'link', type: 'button',
+    onclick: () => { caballos.sueltos = false; caballos.extra.caballoId = null; render(); },
+  }, ['← Volver a la práctica']));
+  caja.appendChild(titulo('Chukkers sin práctica'));
+  caja.appendChild(el('p', { class: 'pista', style: 'margin-bottom:14px' }, [
+    'Para los días en que el caballo jugó y vos no: otro club, otro jinete, un partido '
+    + 'al que lo prestaste. Tocá la casilla del caballo y poné la fecha.',
+  ]));
+
+  const activos = caballos.caballada.filter((c) => c.activo);
+  if (!activos.length) {
+    caja.appendChild(el('div', { class: 'vacio' }, ['Todavía no cargaste ningún caballo.']));
+    return caja;
+  }
+
+  const lista = el('div', { class: 'lista' });
+  activos.forEach((caballo) => {
+    const cuantos = extrasDe(caballo.id).length;
+    const tarjeta = el('div', {
+      class: 'caballo' + (cuantos ? ' usado' : '') + (caballo.lesionado ? ' lesionado' : ''),
+    }, [
+      el('div', { class: 'cab-head' }, [
+        caballo.lesionado ? icono('cruz', 13, 'cruz') : null,
+        el('b', {}, [caballo.nombre]),
+        cuantos
+          ? el('i', {}, [cantidad(extrasDe(caballo.id).reduce((a, e) => a + e.chukkers, 0))
+            + ' chukkers afuera'])
+          : null,
+      ].filter(Boolean)),
+      el('div', { class: 'chuks' }, [casillaExtra(caballo)]),
+    ]);
+    if (caballos.extra.caballoId === caballo.id) tarjeta.appendChild(panelExtra(caballo));
+    lista.appendChild(tarjeta);
+  });
+  caja.appendChild(lista);
+  return caja;
+}
+
 /* --------------------------------------------------------------- la carga */
 
 function panelCargar(raiz) {
@@ -257,6 +450,11 @@ function panelCargar(raiz) {
   // pantalla para llegar.
   if (caballos.altaTorneo) {
     raiz.appendChild(altaDeTorneo());
+    return;
+  }
+
+  if (caballos.sueltos) {
+    raiz.appendChild(panelSueltos());
     return;
   }
 
@@ -312,6 +510,11 @@ function panelCargar(raiz) {
       }, [etiquetaLugar(evento, c)]);
     }));
 
+    // La casilla de los chukkers de afuera, al final y separada por una raya:
+    // no es un lugar más de la práctica, es otra cosa.
+    pastillas.appendChild(el('span', { class: 'sep-chuk' }));
+    pastillas.appendChild(casillaExtra(caballo));
+
     const tarjeta = el('div', {
       class: 'caballo' + (suyos.length ? ' usado' : '') + (caballo.lesionado ? ' lesionado' : ''),
     }, [
@@ -364,6 +567,9 @@ function panelCargar(raiz) {
         el('span', {}, ['Cómo anduvo hoy']), punt,
       ]));
     }
+
+    // El panel de los chukkers de afuera, con lo que ya se cargó de ese caballo.
+    if (caballos.extra.caballoId === caballo.id) tarjeta.appendChild(panelExtra(caballo));
 
     lista.appendChild(tarjeta);
   });
@@ -678,6 +884,20 @@ function estadisticas() {
     });
   });
 
+  // Los chukkers de afuera pesan igual: son patas del caballo. No suman
+  // jornada del club ni puntaje —nadie los vio— pero sí carga, que es
+  // justamente el número que sirve para no pasarlo de rosca.
+  (caballos.extras || []).forEach((e) => {
+    const s = porId.get(e.caballo_id);
+    if (!s) return;
+    const dias = diasDesde(e.fecha);
+    s.chukkers += e.chukkers;
+    s.afuera = (s.afuera || 0) + e.chukkers;
+    if (dias <= 7) s.chukkers7 += e.chukkers;
+    if (dias <= 30) s.chukkers30 += e.chukkers;
+    if (!s.ultimo || e.fecha > s.ultimo) s.ultimo = e.fecha;
+  });
+
   stats.forEach((s) => {
     s.promedio = s.puntajes.length
       ? s.puntajes.reduce((a, b) => a + b, 0) / s.puntajes.length
@@ -891,6 +1111,8 @@ function vistaCaballos(raiz) {
           caballos.buscando = false;
           caballos.filtro = '';
           caballos.altaTorneo = false;
+          caballos.sueltos = false;
+          caballos.extra.caballoId = null;
           caballos.sub = clave;
           render();
         },
@@ -959,25 +1181,42 @@ const colorDeCelda = (celda) => (celda.chukkers <= 0 ? CELDA_VACIA
  */
 function formaDeCelda(celda) {
   const jugo = celda.chukkers > 0;
+  // El día que hubo práctica y además jugó afuera es un día jugado como
+  // cualquiera: la diferencia la hace el punto, no el color. La diagonal del
+  // torneo solo vale si lo del torneo fue todo lo que jugó.
+  const soloAfuera = jugo && celda.afuera >= celda.chukkers;
   return {
     jugo,
     relleno: colorDeCelda(celda),
-    diagonal: jugo && celda.torneo,
-    medio: jugo && celda.torneo && celda.chukkers <= 0.5,
+    diagonal: jugo && celda.torneo && !soloAfuera,
+    medio: jugo && celda.torneo && !soloAfuera && celda.chukkers <= 0.5,
+    punto: !!celda.afuera,
   };
 }
+
+/* El punto de los chukkers de afuera: negro con un halo blanco, porque sobre
+   el verde más oscuro —un caballo de 9 o 10— el negro solo se pierde. */
+const PUNTO_AFUERA = '#16202e';
+const HALO_AFUERA = '#ffffff';
 
 /**
  * Mete, entre las jornadas, un renglón vacío por cada día del calendario en el
  * que no se jugó. Dos prácticas el mismo día siguen siendo dos columnas.
  */
-function diaPorDia(jornadas) {
+function diaPorDia(jornadas, extras) {
   const conFecha = {};
   jornadas.forEach((ev) => { (conFecha[ev.fecha] = conFecha[ev.fecha] || []).push(ev); });
 
+  // El calendario también tiene que llegar a los días en que el caballo jugó
+  // afuera: puede haber sido antes de la primera práctica o después de la
+  // última, y si no se estira el rango esos días no existirían.
+  const fechas = jornadas.map((e) => e.fecha)
+    .concat((extras || []).map((e) => e.fecha))
+    .sort();
+
   const columnas = [];
-  const dia = new Date(jornadas[0].fecha + 'T12:00:00Z');
-  const ultimo = jornadas[jornadas.length - 1].fecha;
+  const dia = new Date(fechas[0] + 'T12:00:00Z');
+  const ultimo = fechas[fechas.length - 1];
   for (let vueltas = 0; vueltas < 800; vueltas += 1) {
     const fecha = dia.toISOString().slice(0, 10);
     if (conFecha[fecha]) columnas.push(...conFecha[fecha]);
@@ -1003,7 +1242,15 @@ function planoDelCalendario(stats, medidas) {
   // justamente lo que hay que ver —un caballo que descansó una semana no es lo
   // mismo que uno que descansó una tarde—. Cada día sin jornada entra como una
   // rayita de un píxel: se distinguen, y casi no ocupan.
-  const eventos = jornadas.length ? diaPorDia(jornadas) : [];
+  const extras = caballos.extras || [];
+  const eventos = (jornadas.length || extras.length) ? diaPorDia(jornadas, extras) : [];
+
+  // Los chukkers de afuera, listos para buscar por caballo y día.
+  const afuera = {};
+  extras.forEach((e) => {
+    const k = e.caballo_id + '|' + e.fecha;
+    afuera[k] = (afuera[k] || 0) + e.chukkers;
+  });
 
   // Los que jugaron, y también los lesionados que no jugaron nada: que un
   // caballo esté parado es exactamente lo que este cuadro tiene que mostrar.
@@ -1021,13 +1268,16 @@ function planoDelCalendario(stats, medidas) {
   const filas = stats.concat(parados).map((s) => {
     const celdas = eventos.map((ev) => {
       const lugares = ev.misChukkers.filter((c) => ev.uso[c] === s.caballo.id).length;
+      const deAfuera = afuera[s.caballo.id + '|' + ev.fecha] || 0;
       return {
         fecha: ev.fecha,
-        chukkers: lugares * pesoDe(ev),
+        chukkers: lugares * pesoDe(ev) + deAfuera,
         puntaje: ev.puntajes[s.caballo.id] || null,
         // El torneo exige distinto que la práctica: el cuadrito lo dice con
         // una diagonal, y si el caballo hizo medio chukker se llena la mitad.
         torneo: ev.tipo === 'aap',
+        // Ese día jugó también afuera: lo dice un punto en el centro.
+        afuera: deAfuera,
       };
     });
     const jugadas = celdas.map((c, i) => (c.chukkers > 0 ? i : -1)).filter((i) => i >= 0);
@@ -1130,6 +1380,21 @@ function grafico(raiz, stats) {
     + 'vea el descanso. Deslizá de costado para ver toda la temporada.',
   ]));
 
+  // La referencia del punto, solo si hay alguno: si no, es una aclaración de
+  // algo que no está en el dibujo.
+  if ((caballos.extras || []).length) {
+    const marca = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    marca.setAttribute('width', 15);
+    marca.setAttribute('height', 15);
+    marca.setAttribute('viewBox', '0 0 15 15');
+    marca.innerHTML = '<rect x="0.5" y="0.5" width="14" height="14" rx="3" fill="' + RAMPA_PUNTAJE[2] + '"/>'
+      + '<circle cx="7.5" cy="7.5" r="3.2" fill="' + HALO_AFUERA + '" opacity="0.92"/>'
+      + '<circle cx="7.5" cy="7.5" r="2.5" fill="' + PUNTO_AFUERA + '"/>';
+    raiz.appendChild(el('p', { class: 'ref-afuera' }, [
+      marca, el('span', {}, ['el punto marca los chukkers que jugó fuera del club']),
+    ]));
+  }
+
   const nodo = (tag, attrs, hijos) => {
     const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
     Object.entries(attrs || {}).forEach(([k, v]) => n.setAttribute(k, String(v)));
@@ -1197,10 +1462,19 @@ function grafico(raiz, stats) {
         }));
       }
 
+      // El punto de los chukkers de afuera, en el centro del cuadradito.
+      if (f.punto) {
+        const cx = x[c] + M.celda / 2;
+        const cy = y + M.celda / 2;
+        g.appendChild(nodo('circle', { cx, cy, r: 3.2, fill: HALO_AFUERA, opacity: 0.92 }));
+        g.appendChild(nodo('circle', { cx, cy, r: 2.5, fill: PUNTO_AFUERA }));
+      }
+
       const detalle = fila.caballo.nombre + ' · ' + Hoja.fechaCorta(celda.fecha) + ' · '
         + (f.jugo
           ? cantidad(celda.chukkers) + (celda.chukkers === 1 ? ' chukker' : ' chukkers')
-            + (celda.torneo ? ' de torneo' : '')
+            + (celda.torneo && !f.punto ? ' de torneo' : '')
+            + (celda.afuera ? ' · ' + cantidad(celda.afuera) + ' afuera del club' : '')
             + (celda.puntaje ? ' · puntaje ' + celda.puntaje : ' · sin puntaje')
           : 'no jugó');
       g.appendChild(nodo('title', {}, [])).textContent = detalle;
@@ -1447,6 +1721,24 @@ function calendarioEnCanvas(stats) {
         ctx.lineCap = 'round';
         ctx.stroke();
         ctx.lineCap = 'butt';
+      }
+
+      // El punto de los chukkers de afuera. Mismas proporciones que en
+      // pantalla: el halo mide un tercio del cuadradito.
+      if (f.punto) {
+        const px = cx + M.celda / 2;
+        const py = y + M.celda / 2;
+        const r = M.celda * 0.18;
+        ctx.beginPath();
+        ctx.arc(px, py, r * 1.28, 0, Math.PI * 2);
+        ctx.fillStyle = HALO_AFUERA;
+        ctx.globalAlpha = 0.92;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fillStyle = PUNTO_AFUERA;
+        ctx.fill();
       }
     });
 

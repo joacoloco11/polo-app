@@ -517,7 +517,7 @@ function vistaCanchas(raiz) {
     return;
   }
 
-  const { canchas: uso, torneos, trabajos, observaciones } = canchas.datos;
+  const { canchas: uso, torneos, trabajos, observaciones, lluvias } = canchas.datos;
 
   if (!uso.length) {
     raiz.appendChild(el('div', { class: 'vacio' }, ['Todavía no se jugó en ninguna cancha.']));
@@ -627,6 +627,18 @@ function vistaCanchas(raiz) {
         }, ['×'])
         : null,
     ]))));
+
+  /* ---- los días de lluvia, para poder sacar el que se cargó mal */
+  if (lluvias && lluvias.length) {
+    const total = lluvias.reduce((a, l) => a + Number(l.mm || 0), 0);
+    raiz.appendChild(el('div', { class: 'titulo-con-total' }, [
+      el('h2', {}, ['Días de lluvia']),
+      el('em', {}, [total + ' mm en la temporada']),
+    ]));
+    // Del más nuevo al más viejo: el que se acaba de cargar mal está arriba.
+    raiz.appendChild(el('div', { class: 'lluvias' },
+      lluvias.slice().sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map(unDiaDeLluvia)));
+  }
 
   /* ---- las observaciones, abajo de todo */
   if (observaciones && observaciones.length) {
@@ -746,6 +758,24 @@ function botonDeBorrar(que, id, cartel) {
       await cargarCanchas();
     }, canchas),
   }, ['×']);
+}
+
+/**
+ * Un día de lluvia: la fecha, los milímetros y la cruz para sacarlo.
+ *
+ * Van en pastillas y no en renglones porque una temporada tiene veinte o
+ * treinta días de lluvia: en lista sería una página entera, y lo único que se
+ * viene a hacer acá es encontrar el que se cargó mal y borrarlo.
+ */
+function unDiaDeLluvia(l) {
+  const [, mes, dia] = String(l.fecha).split('-');
+  return el('span', { class: 'lluvia-dia' }, [
+    el('b', {}, [Number(dia) + '/' + Number(mes)]),
+    el('em', {}, [l.mm + ' mm']),
+    estado.jugador.admin
+      ? botonDeBorrar('lluvia', l.id, 'Borrar la lluvia del ' + Number(dia) + '/' + Number(mes))
+      : null,
+  ].filter(Boolean));
 }
 
 /** Una observación: de qué canchas habla, quién la escribió y qué dice. */

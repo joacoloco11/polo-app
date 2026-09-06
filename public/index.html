@@ -370,6 +370,25 @@
   .chuk.medio { width: 42px; font-size: 12px; }
   .chuk[data-estado="mio"] { background: var(--teal); border-color: var(--teal); color: var(--sobre-color); font-weight: 700; }
   .chuk[data-estado="otro"] { opacity: .35; }
+
+  /* --- los chukkers jugados fuera del club --- */
+  /* La casilla no es un lugar más de la práctica: va al final, más ancha, con
+     la palabra, y separada de las seis por una raya. */
+  .chuk.extra { width: auto; padding: 0 13px; font-size: 12px; letter-spacing: .4px; }
+  .chuk.extra[data-estado="cargado"] { border-color: var(--teal); color: var(--teal); font-weight: 600; }
+  .sep-chuk { width: 1px; height: 26px; background: var(--line); margin: 0 3px; align-self: center; }
+  .extra-panel { background: var(--surface); border-radius: 10px; padding: 12px 12px 4px; margin-top: 10px; }
+  .extra-panel .acciones { margin-top: 4px; }
+  .extra-fila { display: flex; align-items: baseline; gap: 9px; padding: 5px 0; }
+  .extra-fila + .extra-fila { border-top: 1px solid var(--line); }
+  .extra-fila b { font-family: var(--serif); font-size: 13px; font-weight: 600; }
+  .extra-fila span { font-size: 12.5px; color: var(--teal); font-weight: 600; }
+  .extra-fila em { font-style: normal; font-size: 11.5px; color: var(--muted); flex: 1; }
+  .extra-fila .sacar { font-size: 17px; padding: 0 4px; min-height: 0; }
+  /* La referencia del punto, abajo del texto del calendario. */
+  .ref-afuera { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted); margin: 0 0 10px; }
+  .ref-afuera svg { flex: none; }
+
   .puntaje { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
   .puntaje span { font-size: 11px; color: var(--muted); flex: 1; }
   .puntaje select { width: auto; min-width: 78px; }
@@ -676,6 +695,25 @@
   .trabajo .que { flex: 1; min-width: 0; }
   .trabajo .cuanto { font-weight: 700; }
 
+  /* --- los días de lluvia --- */
+  /* Un título con su número a la derecha, en el mismo renglón. */
+  .titulo-con-total { display: flex; align-items: baseline; gap: 10px; }
+  .titulo-con-total h2 { flex: 1; }
+  .titulo-con-total em {
+    font-style: normal; font-size: 11.5px; color: var(--muted); white-space: nowrap;
+  }
+  /* En pastillas y no en renglones: una temporada tiene veinte o treinta días
+     de lluvia y en lista serían una página entera. */
+  .lluvias { display: flex; flex-wrap: wrap; gap: 7px; }
+  .lluvia-dia {
+    display: flex; align-items: baseline; gap: 6px;
+    border: 1px solid var(--line); border-radius: 9px; background: var(--surface);
+    padding: 5px 5px 5px 10px;
+  }
+  .lluvia-dia b { font-size: 13px; font-weight: 700; }
+  .lluvia-dia em { font-style: normal; font-size: 11.5px; color: var(--azul); font-weight: 600; }
+  .lluvia-dia .sacar { font-size: 16px; padding: 0 4px; min-height: 0; }
+
   /* --- las observaciones --- */
   .obs {
     border: 1px solid var(--line); border-radius: 12px; background: var(--ground);
@@ -738,13 +776,13 @@
      el que tenía guardado. Cambia con cada versión que se publica, junto con
      `lib/version.js`. Sin esto, uno sube los archivos y sigue viendo la app
      vieja hasta que se le ocurre limpiar el navegador. -->
-<script src="logo.js?v=2026.09.02"></script>
-<script src="hoja.js?v=2026.09.02"></script>
-<script src="comun.js?v=2026.09.02"></script>
-<script src="caballos.js?v=2026.09.02"></script>
-<script src="usocanchas.js?v=2026.09.02"></script>
-<script src="ranking.js?v=2026.09.02"></script>
-<script src="armar.js?v=2026.09.02"></script>
+<script src="logo.js?v=2026.09.06"></script>
+<script src="hoja.js?v=2026.09.06"></script>
+<script src="comun.js?v=2026.09.06"></script>
+<script src="caballos.js?v=2026.09.06"></script>
+<script src="usocanchas.js?v=2026.09.06"></script>
+<script src="ranking.js?v=2026.09.06"></script>
+<script src="armar.js?v=2026.09.06"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */
 
