@@ -10,7 +10,7 @@
  * abajo de la pantalla se lee otra, el celular se quedó con el código viejo y
  * lo único que hace falta es recargar.
  */
-const VERSION = '2026.09.06';
+const VERSION = '2026.09.08';
 
 const estado = {
   jugador: null,     // quién entró
@@ -236,10 +236,18 @@ function estrella(alto) {
 }
 
 async function pedir(ruta, opciones = {}) {
-  const r = await fetch(ruta, {
-    ...opciones,
-    headers: { 'Content-Type': 'application/json', ...(opciones.headers || {}) },
-  });
+  let r;
+  try {
+    r = await fetch(ruta, {
+      ...opciones,
+      headers: { 'Content-Type': 'application/json', ...(opciones.headers || {}) },
+    });
+  } catch (e) {
+    // `fetch` tira "Failed to fetch" cuando no hay señal o el servidor no
+    // contesta. En castellano y diciendo qué hacer, que es lo que hace falta
+    // arriba de un caballo con las riendas en la mano.
+    throw new Error('No hay conexión con el servidor. Probá de nuevo en un momento.');
+  }
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(datos.error || 'No se pudo conectar.');
   return datos;

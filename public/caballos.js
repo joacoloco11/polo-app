@@ -24,6 +24,7 @@ const caballos = {
   // Qué caballo tiene abierta la casilla extra y lo que se está escribiendo.
   // Uno a la vez: son cuatro campos y no entran dos formularios en la pantalla.
   extra: { caballoId: null, fecha: '', jinete: '', chukkers: '', error: null },
+  cargando: false,      // hay una consulta de jornadas en vuelo
   sueltos: false,       // la pantalla de cargar chukkers sin práctica
   elegido: null,        // la clave de la jornada abierta
   buscando: false,      // el buscador de jornadas anteriores
@@ -73,21 +74,39 @@ function cantidad(n) {
   return Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
 }
 
+const esperarUn = (ms) => new Promise((r) => { setTimeout(r, ms); });
+
+/**
+ * Trae las jornadas y la caballada.
+ *
+ * Reintenta una vez sola antes de darse por vencida. Esta consulta sale al
+ * abrir la app, junto con otras dos, contra un servidor que en el plan gratis
+ * puede estar recién despertándose: cada tanto una se cae por tiempo. Antes,
+ * cuando eso pasaba, la solapa Caballos quedaba en "Cargando…" para siempre y
+ * había que cerrar la app entera para que volviera a intentar.
+ */
 async function cargarJornadas() {
-  try {
-    const r = await pedir('/api/jornadas');
-    caballos.eventos = r.eventos;
-    caballos.caballada = r.caballos;
-    caballos.lesiones = r.lesiones || [];
-    caballos.extras = r.extras || [];
-    caballos.error = null;
-    if (!caballos.eventos.some((e) => claveDe(e) === caballos.elegido)) {
-      // Por defecto, la última donde figura: es casi siempre la que viene a cargar.
-      caballos.elegido = caballos.eventos.length ? claveDe(caballos.eventos[0]) : null;
+  if (caballos.cargando) return;      // dos llamadas juntas traen lo mismo
+  caballos.cargando = true;
+  for (let intento = 0; intento < 2; intento += 1) {
+    try {
+      const r = await pedir('/api/jornadas');
+      caballos.eventos = r.eventos;
+      caballos.caballada = r.caballos;
+      caballos.lesiones = r.lesiones || [];
+      caballos.extras = r.extras || [];
+      caballos.error = null;
+      if (!caballos.eventos.some((e) => claveDe(e) === caballos.elegido)) {
+        // Por defecto, la última donde figura: casi siempre es la que viene a cargar.
+        caballos.elegido = caballos.eventos.length ? claveDe(caballos.eventos[0]) : null;
+      }
+      break;
+    } catch (e) {
+      caballos.error = e.message;
+      if (intento === 0) await esperarUn(1200);
     }
-  } catch (e) {
-    caballos.error = e.message;
   }
+  caballos.cargando = false;
   render();
 }
 
@@ -289,7 +308,8 @@ function casillaExtra(caballo) {
         // Se abre en blanco y con la fecha de hoy: lo más común es cargar lo
         // de recién.
         Object.assign(caballos.extra, {
-          caballoId: caballo.id, fecha: hoy(), jinete: '', chukkers: '', error: null,
+          // Uno por defecto: es lo más común y así se guarda sin escribir nada.
+          caballoId: caballo.id, fecha: hoy(), jinete: '', chukkers: 1, error: null,
         });
       }
       render();
@@ -322,7 +342,7 @@ function panelExtra(caballo) {
       await cargarJornadas();
       // Se deja abierto: cargar dos días seguidos del mismo caballo es lo
       // normal cuando uno se acuerda de golpe de toda la semana.
-      Object.assign(x, { jinete: '', chukkers: '', error: null });
+      Object.assign(x, { jinete: '', chukkers: 1, error: null });
     } catch (e) {
       x.error = e.message;
     }
@@ -1114,13 +1134,24 @@ function vistaCaballos(raiz) {
           caballos.sueltos = false;
           caballos.extra.caballoId = null;
           caballos.sub = clave;
+          // Lo mismo que al tocar la solapa: si la carga se cayó, reintenta.
+          if (!caballos.eventos) cargarJornadas();
           render();
         },
       }, [texto]))));
 
-  if (caballos.error) raiz.appendChild(aviso('mal', caballos.error));
+  if (caballos.error && !caballos.cargando) raiz.appendChild(aviso('mal', caballos.error));
   if (!caballos.eventos) {
-    raiz.appendChild(el('div', { class: 'vacio' }, ['Cargando…']));
+    // Con un error de por medio no está cargando: falló. Dejar "Cargando…"
+    // eternamente es lo que hacía pensar que la app se había colgado.
+    raiz.appendChild(caballos.error && !caballos.cargando
+      ? el('div', { class: 'acciones' }, [
+        el('button', {
+          class: 'primary', type: 'button',
+          onclick: (e) => conBoton(e.target, cargarJornadas, caballos),
+        }, ['Volver a intentar']),
+      ])
+      : el('div', { class: 'vacio' }, ['Cargando…']));
     return;
   }
 

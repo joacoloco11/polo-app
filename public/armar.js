@@ -1019,6 +1019,9 @@ function alEntrarA(id) {
   if (id === 'ranking' && (!ranking.lista || rankingSucio)) cargarRanking();
   if (id === 'jugador' && (!miFicha.datos || rankingSucio)) abrirJugador(estado.jugador.id, 'mi');
   if (id === 'canchas' && !canchas.datos) cargarCanchas();
+  // Si la carga inicial se cayó, volver a tocar la solapa vuelve a intentar.
+  // Antes había que cerrar la app entera para salir de "Cargando…".
+  if (id === 'caballos' && !caballos.eventos) cargarJornadas();
 }
 
 function pestanas() {

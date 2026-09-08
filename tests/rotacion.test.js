@@ -408,52 +408,62 @@ test('el ajuste no se escapa más allá del tope', () => {
   assert.equal(ajusteDeHandicap(palizas.map((x) => ({ ...x, diferencia: -7 }))), -3);
 });
 
-test('la flecha arranca arriba y se mueve con los últimos tres', () => {
-  assert.equal(flechaDe([]), 2);
-  assert.equal(flechaDe([
-    { diferencia: 1, practicaId: 'a' }, { diferencia: 1, practicaId: 'b' },
-    { diferencia: 1, practicaId: 'c' },
-  ]), 2);
-  assert.equal(flechaDe([
-    { diferencia: -1, practicaId: 'a' }, { diferencia: -1, practicaId: 'b' },
-    { diferencia: -1, practicaId: 'c' },
-  ]), -2);
-  // Dos ganados y uno perdido: 45° para arriba.
-  assert.equal(flechaDe([
-    { diferencia: 2, practicaId: 'a' }, { diferencia: 2, practicaId: 'b' },
-    { diferencia: -2, practicaId: 'c' },
-  ]), 1);
+// --- la escalera de la flecha ---
+// Cinco escalones; la flecha que se dibuja es el escalón menos 3:
+// 5 → 2 (arriba), 4 → 1 (diagonal arriba), 3 → 0 (horizontal),
+// 2 → −1 (diagonal abajo), 1 → −2 (abajo).
+const gano = (id, por = 2) => ({ diferencia: por, practicaId: id });
+const perdio = (id, por = 2) => ({ diferencia: -por, practicaId: id });
+const empato = (id) => ({ diferencia: 0, practicaId: id });
+
+test('la flecha arranca en diagonal arriba', () => {
+  assert.equal(flechaDe([]), 1);
 });
 
-test('la flecha solo mira los últimos tres partidos', () => {
-  const viejos = Array.from({ length: 8 }, (_, i) => ({ diferencia: -3, practicaId: 'v' + i }));
-  const nuevos = [
-    { diferencia: 3, practicaId: 'n1' }, { diferencia: 3, practicaId: 'n2' },
-    { diferencia: 3, practicaId: 'n3' },
-  ];
-  assert.equal(flechaDe(viejos.concat(nuevos)), 2);
+test('cada partido mueve la flecha un escalón', () => {
+  assert.equal(flechaDe([gano('a')]), 2);
+  assert.equal(flechaDe([perdio('a')]), 0);
+  assert.equal(flechaDe([perdio('a'), perdio('b')]), -1);
+  assert.equal(flechaDe([perdio('a'), perdio('b'), perdio('c')]), -2);
+});
+
+test('la goleada mueve dos escalones, y no es simétrica', () => {
+  // Ganar por más de 5 vale doble; por 5 justo, no.
+  assert.equal(flechaDe([perdio('a'), gano('b', 6)]), 2);
+  assert.equal(flechaDe([perdio('a'), gano('b', 5)]), 1);
+  // Perder por más de 7 vale doble; por 7 justo, no.
+  assert.equal(flechaDe([perdio('a', 7)]), 0);
+  assert.equal(flechaDe([perdio('a', 8)]), -1);
 });
 
 test('el empate acerca la flecha un escalón a la horizontal', () => {
-  // Dos ganados la dejan en 2; el empate la baja a 1.
-  assert.equal(flechaDe([
-    { diferencia: 1, practicaId: 'a' }, { diferencia: 1, practicaId: 'b' },
-    { diferencia: 0, practicaId: 'c' },
-  ]), 1);
-  // Dos perdidos la dejan en -2; el empate la sube a -1.
-  assert.equal(flechaDe([
-    { diferencia: -1, practicaId: 'a' }, { diferencia: -1, practicaId: 'b' },
-    { diferencia: 0, practicaId: 'c' },
-  ]), -1);
-  // Sobre la horizontal, el empate la deja donde está.
-  assert.equal(flechaDe([
-    { diferencia: 1, practicaId: 'a' }, { diferencia: -1, practicaId: 'b' },
-    { diferencia: 0, practicaId: 'c' },
-  ]), 0);
+  // Venía arriba: el empate la baja.
+  assert.equal(flechaDe([gano('a'), gano('b'), empato('c')]), 1);
+  // Venía abajo: el empate la sube.
+  assert.equal(flechaDe([perdio('a'), perdio('b'), empato('c')]), 0);
+  // Ya estaba en la horizontal: se queda.
+  assert.equal(flechaDe([perdio('a'), empato('b')]), 0);
 });
 
-test('el MVP levanta la flecha aunque haya perdido', () => {
-  assert.equal(flechaDe([{ diferencia: -1, mvp: true, practicaId: 'a' }]), 0);
+test('el MVP sube dos escalones, una sola vez por práctica', () => {
+  assert.equal(flechaDe([{ ...perdio('a'), mvp: true }]), 2);
+  // Una práctica de 12: dos partidos el mismo día, un solo MVP.
+  assert.equal(flechaDe([
+    { ...perdio('a'), mvp: true },
+    { ...perdio('a'), mvp: true },
+  ]), 1);
+});
+
+test('el techo hace que una derrota se note aunque venga ganando todo', () => {
+  const veinte = Array.from({ length: 20 }, (_, i) => gano('g' + i));
+  assert.equal(flechaDe(veinte), 2);
+  assert.equal(flechaDe(veinte.concat(perdio('x'))), 1);
+});
+
+test('el piso hace que una victoria se note aunque venga perdiendo todo', () => {
+  const veinte = Array.from({ length: 20 }, (_, i) => perdio('p' + i));
+  assert.equal(flechaDe(veinte), -2);
+  assert.equal(flechaDe(veinte.concat(gano('x'))), -1);
 });
 
 test('comoViene ordena por fecha antes de contar', () => {
@@ -462,6 +472,7 @@ test('comoViene ordena por fecha antes de contar', () => {
     { fecha: '2026-09-01', orden: 1, diferencia: 8, practicaId: 'a' },
     { fecha: '2026-09-05', orden: 1, diferencia: -1, practicaId: 'b' },
   ];
-  // Paliza ganada (+1) y después dos derrotas ajustadas (−1) = 0.
-  assert.deepEqual(comoViene(desordenados), { ajuste: 0, flecha: -1 });
+  // Ajuste: paliza ganada (+1) y después dos derrotas ajustadas (−1) = 0.
+  // Flecha: 4 + 2 = 6 → tope 5, y las dos derrotas la dejan en 3 = horizontal.
+  assert.deepEqual(comoViene(desordenados), { ajuste: 0, flecha: 0 });
 });
