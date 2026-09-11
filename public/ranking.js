@@ -182,6 +182,263 @@ function vistaRanking(raiz) {
     'Ganar suma 3 puntos y empatar 1. En las prácticas de 12 los enfrentamientos '
     + 'valen la mitad, porque cada uno juega dos de los tres.',
   ]));
+
+  raiz.appendChild(el('div', { class: 'acciones' }, [
+    el('button', {
+      class: 'primary', type: 'button',
+      onclick: (e) => Hoja.compartirCanvas(
+        rankingEnCanvas(paraCompartir(ordenada), orden),
+        'ranking-san-diego.jpg',
+        e.currentTarget,
+      ),
+    }, [icono('compartir', 16), 'Compartir el ranking en JPG']),
+  ]));
+}
+
+/* ------------------------------------------------- el ranking para el grupo */
+
+/**
+ * Lo que puede salir de la app. La imagen se manda a un grupo de WhatsApp y de
+ * ahí se reenvía sola, así que lleva solamente lo que ya es público:
+ *
+ * - **sin el HCP interno**, que hoy solo ve un administrador;
+ * - **sin los invitados**, que también son cosa de administradores. El que la
+ *   arma puede ser admin y verlos en pantalla; en la imagen no van igual.
+ */
+const paraCompartir = (ordenada) => ordenada.filter((j) => j.categoria !== 'invitado');
+
+const JPG_RANKING = {
+  ancho: 1240,
+  margen: 92,
+  fila: 62,
+  podio: 108,
+  oro: ['#a07722', '#8a93a6', '#9c6b3f'],
+  tinta: '#16202e',
+  suave: '#6b7891',
+  linea: '#dde3ec',
+  raya: '#eef2f8',
+  fondo: '#f6f8fb',
+  teal: '#00897a',
+  rojo: '#c62828',
+  dorado: '#a07722',
+};
+
+/* Bitter para los nombres y Archivo para los números, como en la app. Si el
+   celular todavía no bajó las tipografías, las de sistema toman el lugar y la
+   imagen sale igual: por eso van los respaldos escritos. */
+const jpgSerif = (px, peso) => (peso ? peso + ' ' : '') + px + 'px Bitter, Georgia, serif';
+const jpgSans = (px, peso) => (peso ? peso + ' ' : '') + px + 'px Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif';
+
+/** La flecha del ranking, dibujada a mano en el canvas. */
+function flechaEnCanvas(ctx, posicion, cx, cy, largo) {
+  const p = Math.max(-2, Math.min(2, Number(posicion) || 0));
+  const giro = { 2: -90, 1: -45, 0: 0, '-1': 45, '-2': 90 }[String(p)] * Math.PI / 180;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(giro);
+  ctx.strokeStyle = p > 0 ? JPG_RANKING.teal : (p < 0 ? JPG_RANKING.rojo : JPG_RANKING.suave);
+  ctx.lineWidth = Math.max(2, largo * 0.14);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const m = largo / 2;
+  ctx.beginPath();
+  ctx.moveTo(-m, 0);
+  ctx.lineTo(m, 0);
+  ctx.moveTo(m - largo * 0.3, -largo * 0.3);
+  ctx.lineTo(m, 0);
+  ctx.lineTo(m - largo * 0.3, largo * 0.3);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * El ranking como imagen: los tres primeros en recuadros arriba y el resto en
+ * la tabla. El alto se calcula con la cantidad de jugadores —esta no es una
+ * hoja A4 como la planilla, es una imagen para mirar en el celular—.
+ *
+ * El pie es la parte que trabaja: el que está en la lista y todavía no entró a
+ * la app ve ahí qué se está perdiendo.
+ */
+function rankingEnCanvas(lista, orden) {
+  const M = JPG_RANKING;
+  const ancho = M.ancho;
+  const podio = lista.slice(0, 3);
+  const resto = lista.slice(3);
+
+  const cabeceraAlto = 300;
+  const podioAlto = podio.length * (M.podio + 16);
+  const tablaAlto = resto.length ? 54 + resto.length * M.fila : 0;
+  const pieAlto = 210;
+  const alto = cabeceraAlto + podioAlto + tablaAlto + pieAlto;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = ancho;
+  canvas.height = alto;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, ancho, alto);
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+
+  const x = M.margen;
+  const derecha = ancho - M.margen;
+
+  /* ---- cabecera */
+  if (Hoja.LOGO.complete && Hoja.LOGO.naturalWidth) {
+    const altoLogo = 150;
+    const anchoLogo = Hoja.LOGO.naturalWidth * altoLogo / Hoja.LOGO.naturalHeight;
+    ctx.drawImage(Hoja.LOGO, derecha - anchoLogo, 70, anchoLogo, altoLogo);
+  }
+
+  ctx.fillStyle = M.dorado;
+  ctx.font = jpgSans(26, '600');
+  ctx.fillText('CLUB DE CAMPO SAN DIEGO', x, 100);
+
+  ctx.fillStyle = M.tinta;
+  ctx.font = jpgSerif(78, '700');
+  ctx.fillText('Ranking', x, 178);
+
+  ctx.fillStyle = M.suave;
+  ctx.font = jpgSans(30);
+  ctx.fillText([
+    ranking.temporada ? ranking.temporada.nombre : null,
+    'al ' + Hoja.fechaCorta(hoy()).toLowerCase(),
+  ].filter(Boolean).join(' · '), x, 226);
+
+  /* ---- el podio */
+  let y = cabeceraAlto;
+  podio.forEach((j, i) => {
+    ctx.fillStyle = M.fondo;
+    ctx.strokeStyle = M.linea;
+    ctx.lineWidth = 2;
+    rectaRedonda(ctx, x, y, derecha - x, M.podio, 14);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = M.oro[i];
+    ctx.font = jpgSerif(58, '700');
+    ctx.fillText(String(i + 1), x + 32, y + 72);
+
+    ctx.fillStyle = M.tinta;
+    ctx.font = jpgSerif(40, '600');
+    ctx.fillText(j.apodo, x + 110, y + 50);
+
+    ctx.fillStyle = M.suave;
+    ctx.font = jpgSans(25);
+    ctx.fillText([
+      j.practicas + (j.practicas === 1 ? ' práctica' : ' prácticas'),
+      puntos(j.puntos) + (Number(j.puntos) === 1 ? ' punto' : ' puntos'),
+      j.mvps ? j.mvps + ' MVP' : null,
+    ].filter(Boolean).join(' · '), x + 110, y + 86);
+
+    flechaEnCanvas(ctx, j.flecha, derecha - 48, y + M.podio / 2, 34);
+    y += M.podio + 16;
+  });
+
+  /* ---- la tabla, del cuarto para abajo */
+  if (resto.length) {
+    y += 18;
+    const colMvp = derecha;
+    const colPts = derecha - 150;
+    const colPra = derecha - 300;
+
+    ctx.font = jpgSans(22, '600');
+    ctx.fillStyle = M.suave;
+    ctx.textAlign = 'right';
+    ctx.fillText('PRÁCTICAS', colPra, y);
+    ctx.fillText('PUNTOS', colPts, y);
+    ctx.fillText('MVP', colMvp, y);
+    ctx.textAlign = 'left';
+
+    y += 18;
+    ctx.strokeStyle = M.linea;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(derecha, y);
+    ctx.stroke();
+
+    resto.forEach((j, i) => {
+      const base = y + i * M.fila;
+      const medio = base + M.fila / 2 + 11;
+
+      ctx.fillStyle = M.suave;
+      ctx.font = jpgSans(28, '600');
+      ctx.fillText(String(i + 4), x, medio);
+
+      flechaEnCanvas(ctx, j.flecha, x + 92, base + M.fila / 2, 28);
+
+      ctx.fillStyle = M.tinta;
+      ctx.font = jpgSerif(34, '600');
+      ctx.fillText(j.apodo, x + 128, medio);
+
+      ctx.textAlign = 'right';
+      ctx.font = jpgSans(32, orden === 'practicas' ? '700' : '400');
+      ctx.fillStyle = orden === 'practicas' ? M.teal : M.tinta;
+      ctx.fillText(String(j.practicas), derecha - 300, medio);
+
+      ctx.font = jpgSans(32, orden === 'puntos' ? '700' : '400');
+      ctx.fillStyle = orden === 'puntos' ? M.teal : M.tinta;
+      ctx.fillText(puntos(j.puntos), derecha - 150, medio);
+
+      ctx.font = jpgSans(32, orden === 'mvps' ? '700' : '400');
+      ctx.fillStyle = j.mvps ? (orden === 'mvps' ? M.teal : M.tinta) : M.suave;
+      ctx.fillText(String(j.mvps), derecha, medio);
+      ctx.textAlign = 'left';
+
+      ctx.strokeStyle = M.raya;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, base + M.fila);
+      ctx.lineTo(derecha, base + M.fila);
+      ctx.stroke();
+    });
+    y += resto.length * M.fila;
+  }
+
+  /* ---- el pie: la invitación y la referencia de las flechas */
+  y += 44;
+  ctx.strokeStyle = M.linea;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(derecha, y);
+  ctx.stroke();
+
+  y += 48;
+  ctx.fillStyle = M.tinta;
+  ctx.font = jpgSerif(30);
+  ctx.fillText('Mirá tus caballos, tus chukkers y tu ficha', x, y);
+  ctx.fillText('en la app del club.', x, y + 40);
+
+  ctx.fillStyle = M.teal;
+  ctx.font = jpgSans(26, '600');
+  ctx.textAlign = 'right';
+  ctx.fillText(location.host, derecha, y + 40);
+  ctx.textAlign = 'left';
+
+  y += 88;
+  [[2, 'viene en alza'], [0, 'se mantiene'], [-2, 'viene en baja']].forEach(([p, texto], i) => {
+    const cx = x + i * 250;
+    flechaEnCanvas(ctx, p, cx + 11, y - 8, 22);
+    ctx.fillStyle = M.suave;
+    ctx.font = jpgSans(22);
+    ctx.fillText(texto, cx + 32, y);
+  });
+
+  return canvas;
+}
+
+/** Un rectángulo con las esquinas redondeadas, que el canvas no trae de fábrica. */
+function rectaRedonda(ctx, x, y, ancho, alto, radio) {
+  ctx.beginPath();
+  ctx.moveTo(x + radio, y);
+  ctx.arcTo(x + ancho, y, x + ancho, y + alto, radio);
+  ctx.arcTo(x + ancho, y + alto, x, y + alto, radio);
+  ctx.arcTo(x, y + alto, x, y, radio);
+  ctx.arcTo(x, y, x + ancho, y, radio);
+  ctx.closePath();
 }
 
 /* -------------------------------------------------------- la solapa Jugador */

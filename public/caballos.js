@@ -507,7 +507,25 @@ function panelCargar(raiz) {
   /* ---- la caballada, con los chukkers de cada uno */
   raiz.appendChild(el('h2', {}, ['Mi caballada']));
 
-  const activos = caballos.caballada.filter((c) => c.activo);
+  // El botón de repetir aparece solo con la jornada en blanco: si ya cargaste
+  // algo, pisarlo sin avisar sería peor que no tenerlo.
+  const anterior = cargadosDe(evento) ? null : laVezAnterior(evento);
+  if (anterior) {
+    raiz.appendChild(el('button', {
+      class: 'ghost', type: 'button', style: 'margin-bottom:10px',
+      onclick: () => repetirLaVezAnterior(evento, anterior),
+    }, [icono('repetir', 16), 'Repetir los caballos del ' + Hoja.fechaCorta(anterior.fecha).toLowerCase()]));
+  }
+
+  // En orden de cancha: el del primer chukker arriba de todo, y así. Los que
+  // hoy no salen quedan abajo, por nombre. Es el orden en el que uno los
+  // repasa antes de montar, y el mismo que sale en el texto de WhatsApp.
+  const primerLugar = (caballo) => {
+    const lugar = evento.misChukkers.find((c) => evento.uso[c] === caballo.id);
+    return lugar === undefined ? Infinity : evento.misChukkers.indexOf(lugar);
+  };
+  const activos = caballos.caballada.filter((c) => c.activo).slice().sort((a, b) =>
+    (primerLugar(a) - primerLugar(b)) || a.nombre.localeCompare(b.nombre, 'es'));
   const lista = el('div', { class: 'lista' });
 
   activos.forEach((caballo) => {
@@ -649,6 +667,43 @@ function panelCargar(raiz) {
   ]));
 
   raiz.appendChild(altaDeTorneo());
+}
+
+/**
+ * La vez anterior con caballos cargados: la más reciente de las que quedaron
+ * antes de la que está abierta. Casi siempre es la práctica pasada, pero puede
+ * ser un torneo, y si estás cargando una vieja mira lo que había antes de esa.
+ */
+function laVezAnterior(evento) {
+  return (caballos.eventos || [])
+    .filter((e) => claveDe(e) !== claveDe(evento)
+      && e.fecha < evento.fecha
+      && e.misChukkers.some((c) => e.uso[c]))
+    .sort((a, b) => (a.fecha < b.fecha ? 1 : (a.fecha > b.fecha ? -1 : 0)))[0] || null;
+}
+
+/**
+ * Copia aquella carga sobre esta, lugar por lugar y en el mismo orden: lo que
+ * estaba en el primer chukker va al primero de hoy. Los dos días no tienen por
+ * qué tener la misma cantidad de lugares —una práctica de 8 y una de 12 no se
+ * parecen—, así que lo que sobra se ignora y lo que falta queda vacío.
+ *
+ * El caballo lesionado o dado de baja no se copia: el botón está para ahorrar
+ * toques, no para cargar algo que hoy no puede salir. Ese lugar queda libre y
+ * el cartel de abajo lo canta.
+ */
+function repetirLaVezAnterior(evento, antes) {
+  if (!antes) return;
+  const puedeSalir = (id) => {
+    const c = caballos.caballada.find((x) => x.id === id);
+    return !!c && c.activo && !c.lesionado;
+  };
+  evento.misChukkers.forEach((lugar, i) => {
+    const id = antes.uso[antes.misChukkers[i]];
+    if (id && puedeSalir(id)) evento.uso[lugar] = id;
+  });
+  guardarPronto();
+  render();
 }
 
 function guardarEnLaCaballada(caballo) {

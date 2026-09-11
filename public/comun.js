@@ -10,7 +10,7 @@
  * abajo de la pantalla se lee otra, el celular se quedó con el código viejo y
  * lo único que hace falta es recargar.
  */
-const VERSION = '2026.09.12';
+const VERSION = '2026.09.13';
 
 const estado = {
   jugador: null,     // quién entró
@@ -69,6 +69,9 @@ const TRAZOS = {
   plantel: 'M10.7 7a2.7 2.7 0 11-5.4 0 2.7 2.7 0 015.4 0zM2.8 16.6a5.2 5.2 0 0110.4 0'
     + 'M13.4 4.9a2.7 2.7 0 010 4.2M14.2 11.5a5.2 5.2 0 013 4.6',
   compartir: 'M10 13V3M6.5 6.5L10 3l3.5 3.5M4 12v4a1 1 0 001 1h10a1 1 0 001-1v-4',
+  // La flecha va al revés que la de recargar, a propósito: esta trae lo de la
+  // vez pasada, no vuelve a pedir lo de ahora.
+  repetir: 'M3.5 10a6.5 6.5 0 1 0 1.9-4.6M3.4 3.2v3.6h3.6',
   abajo: 'M6 8l4 4 4-4',
   arriba: 'M6 12l4-4 4 4',
   derecha: 'M8 5l5 5-5 5',
@@ -106,8 +109,8 @@ function icono(nombre, alto, clase) {
 
 /**
  * Cómo viene el jugador, en cinco posiciones: 2 arriba, 1 en 45° para arriba,
- * 0 horizontal, −1 en 45° para abajo, −2 abajo. Sale de sus últimos tres
- * partidos y la cuenta la hace el servidor.
+ * 0 horizontal, −1 en 45° para abajo, −2 abajo. Es una escalera de cinco
+ * escalones que cada partido sube o baja, y la cuenta la hace el servidor.
  *
  * Verde para arriba, roja para abajo y los intermedios en el medio: el ángulo
  * dice cuánto y el color lo confirma, así que se lee sin tener que pensar.
