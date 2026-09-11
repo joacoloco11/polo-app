@@ -437,8 +437,12 @@ window.Hoja = (function () {
   /**
    * Compartir cualquier imagen que arme la app, no solo la planilla: sale por
    * el menú del celular y, donde no existe, se baja.
+   *
+   * `texto` viaja al lado del archivo. Donde el destino lo acepta —WhatsApp lo
+   * pone de epígrafe— la dirección de la app queda escrita en el mensaje, y ahí
+   * sí se toca: adentro de un JPG no hay nada tocable.
    */
-  async function compartirCanvas(canvas, nombre, boton) {
+  async function compartirCanvas(canvas, nombre, boton, texto) {
     const original = boton.dataset.original || boton.textContent;
     boton.dataset.original = original;
     boton.disabled = true;
@@ -449,7 +453,7 @@ window.Hoja = (function () {
       const archivo = new File([blob], nombre, { type: 'image/jpeg' });
       if (navigator.canShare({ files: [archivo] })) {
         try {
-          await navigator.share({ files: [archivo] });
+          await navigator.share(texto ? { files: [archivo], text: texto } : { files: [archivo] });
           avisar(boton, 'Compartida', original);
           return;
         } catch (e) {
@@ -458,6 +462,11 @@ window.Hoja = (function () {
       }
     }
     if (!blob) { avisar(boton, 'No se pudo generar la imagen', original); return; }
+    bajarBlob(blob, nombre);
+    avisar(boton, 'Guardada — mandala por WhatsApp', original);
+  }
+
+  function bajarBlob(blob, nombre) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -466,11 +475,125 @@ window.Hoja = (function () {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    avisar(boton, 'Guardada — mandala por WhatsApp', original);
+  }
+
+  /* ------------------------------------------------------------------- PDF */
+
+  /**
+   * El mismo dibujo, en PDF y con un botón de verdad: lo único que se puede
+   * tocar adentro de un archivo.
+   *
+   * Está escrito a mano, sin ninguna biblioteca. No es capricho: la app no baja
+   * nada de afuera —por eso anda con mala señal en la cancha— y un PDF de una
+   * página con una imagen adentro es media docena de objetos. El JPEG entra tal
+   * cual, sin volver a comprimirlo, porque `DCTDecode` es justamente eso.
+   */
+  function pdfDeUnCanvas(canvas, bytesJpeg, enlaces) {
+    const anchoPt = 595.28;                       // el ancho de una A4
+    const altoPt = anchoPt * canvas.height / canvas.width;
+    const aPt = (px) => px * anchoPt / canvas.width;
+
+    const cachos = [];
+    let largo = 0;
+    const crudo = (texto) => {
+      const b = new Uint8Array(texto.length);
+      for (let i = 0; i < texto.length; i++) b[i] = texto.charCodeAt(i) & 0xff;
+      return b;
+    };
+    const poner = (cosa) => {
+      const b = typeof cosa === 'string' ? crudo(cosa) : cosa;
+      cachos.push(b);
+      largo += b.length;
+    };
+
+    const posiciones = [];
+    const objeto = (numero, cuerpo, datos) => {
+      posiciones[numero] = largo;
+      poner(numero + ' 0 obj\n' + cuerpo);
+      if (datos) { poner('\nstream\n'); poner(datos); poner('\nendstream'); }
+      poner('\nendobj\n');
+    };
+
+    // El contenido: estirar la imagen a toda la página. La matriz `cm` lleva el
+    // cuadrado unidad al tamaño del papel.
+    const contenido = 'q ' + anchoPt.toFixed(2) + ' 0 0 ' + altoPt.toFixed(2) + ' 0 0 cm /Im0 Do Q';
+
+    // Los anotadores de enlace van en coordenadas de PDF, que cuentan desde
+    // abajo: por eso el `alto - y` de cada rectángulo.
+    const anotaciones = (enlaces || []).map((z, i) => 7 + i);
+
+    poner('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n');
+    objeto(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    objeto(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    objeto(3, '<< /Type /Page /Parent 2 0 R'
+      + ' /MediaBox [0 0 ' + anchoPt.toFixed(2) + ' ' + altoPt.toFixed(2) + ']'
+      + ' /Resources << /XObject << /Im0 5 0 R >> >>'
+      + ' /Contents 4 0 R'
+      + (anotaciones.length ? ' /Annots [' + anotaciones.map((n) => n + ' 0 R').join(' ') + ']' : '')
+      + ' >>');
+    objeto(4, '<< /Length ' + contenido.length + ' >>', contenido);
+    objeto(5, '<< /Type /XObject /Subtype /Image'
+      + ' /Width ' + canvas.width + ' /Height ' + canvas.height
+      + ' /ColorSpace /DeviceRGB /BitsPerComponent 8'
+      + ' /Filter /DCTDecode /Length ' + bytesJpeg.length + ' >>', bytesJpeg);
+    objeto(6, '<< /Type /Outlines /Count 0 >>');
+
+    (enlaces || []).forEach((z, i) => {
+      const x1 = aPt(z.x);
+      const x2 = aPt(z.x + z.ancho);
+      const y1 = altoPt - aPt(z.y + z.alto);
+      const y2 = altoPt - aPt(z.y);
+      objeto(7 + i, '<< /Type /Annot /Subtype /Link'
+        + ' /Rect [' + [x1, y1, x2, y2].map((n) => n.toFixed(2)).join(' ') + ']'
+        + ' /Border [0 0 0]'
+        + ' /A << /Type /Action /S /URI /URI (' + z.url.replace(/([()\\])/g, '\\$1') + ') >> >>');
+    });
+
+    const total = 7 + (enlaces || []).length;
+    const inicioXref = largo;
+    let xref = 'xref\n0 ' + total + '\n0000000000 65535 f \n';
+    for (let n = 1; n < total; n++) {
+      xref += String(posiciones[n]).padStart(10, '0') + ' 00000 n \n';
+    }
+    poner(xref);
+    poner('trailer\n<< /Size ' + total + ' /Root 1 0 R >>\nstartxref\n' + inicioXref + '\n%%EOF\n');
+
+    const salida = new Uint8Array(largo);
+    let i = 0;
+    cachos.forEach((c) => { salida.set(c, i); i += c.length; });
+    return new Blob([salida], { type: 'application/pdf' });
+  }
+
+  /** Arma el PDF de un canvas y lo manda al menú de compartir. */
+  async function compartirPDF(canvas, nombre, boton, enlaces, texto) {
+    const original = boton.dataset.original || boton.textContent;
+    boton.dataset.original = original;
+    boton.disabled = true;
+    boton.textContent = 'Preparando…';
+
+    const jpeg = await aBlob(canvas);
+    if (!jpeg) { avisar(boton, 'No se pudo generar el archivo', original); return; }
+    const pdf = pdfDeUnCanvas(canvas, new Uint8Array(await jpeg.arrayBuffer()), enlaces);
+
+    if (navigator.canShare) {
+      const archivo = new File([pdf], nombre, { type: 'application/pdf' });
+      if (navigator.canShare({ files: [archivo] })) {
+        try {
+          await navigator.share(texto ? { files: [archivo], text: texto } : { files: [archivo] });
+          avisar(boton, 'Compartido', original);
+          return;
+        } catch (e) {
+          if (e && e.name === 'AbortError') { avisar(boton, original, original); return; }
+        }
+      }
+    }
+    bajarBlob(pdf, nombre);
+    avisar(boton, 'Guardado — mandalo por WhatsApp', original);
   }
 
   return {
     preparar, compartir, copiar, texto, enCanvas, compartirCanvas,
+    compartirPDF, pdfDeUnCanvas,
     fechaCorta, fuente, LOGO, LABEL, IMPRESO,
   };
 })();

@@ -56,6 +56,20 @@
     background: var(--ground);
     border-bottom: 1px solid var(--line);
   }
+  /* La franja de la copia de prueba. Va arriba de todo, ocupa el ancho entero y
+     usa el naranja que no aparece en ninguna otra parte de la app: la única
+     forma de que nadie confunda una app con la otra es que se vea antes que el
+     escudo. */
+  #franja-prueba {
+    background: #9a3412; color: #fff;
+    padding: 7px 14px; text-align: center;
+    font-size: 12px; letter-spacing: 1.2px; line-height: 1.5;
+  }
+  #franja-prueba b { font-weight: 700; }
+  #franja-prueba span {
+    display: block; letter-spacing: 0.2px; font-size: 12px;
+    color: rgba(255,255,255,.85); text-transform: none;
+  }
   /* Todo apoya abajo, así el escudo y el nombre comparten piso sea cual sea el
      tamaño del escudo. La pastilla de ADMIN es la excepción: va centrada. */
   .head-in {
@@ -760,6 +774,13 @@
 </head>
 <body>
 
+<!-- La franja de la copia de prueba. Arranca escondida y la prende el servidor
+     con la variable AMBIENTE: en la app del club nunca se ve. -->
+<div id="franja-prueba" hidden>
+  <b>VERSIÓN DE PRUEBA</b>
+  <span>Lo que cargues acá no llega al club</span>
+</div>
+
 <header>
   <div class="head-in">
     <img class="mark" src="/iconos/logo-192.png" alt="Escudo del Club de Campo San Diego">
@@ -776,13 +797,13 @@
      el que tenía guardado. Cambia con cada versión que se publica, junto con
      `lib/version.js`. Sin esto, uno sube los archivos y sigue viendo la app
      vieja hasta que se le ocurre limpiar el navegador. -->
-<script src="logo.js?v=2026.09.13"></script>
-<script src="hoja.js?v=2026.09.13"></script>
-<script src="comun.js?v=2026.09.13"></script>
-<script src="caballos.js?v=2026.09.13"></script>
-<script src="usocanchas.js?v=2026.09.13"></script>
-<script src="ranking.js?v=2026.09.13"></script>
-<script src="armar.js?v=2026.09.13"></script>
+<script src="logo.js?v=2026.09.15"></script>
+<script src="hoja.js?v=2026.09.15"></script>
+<script src="comun.js?v=2026.09.15"></script>
+<script src="caballos.js?v=2026.09.15"></script>
+<script src="usocanchas.js?v=2026.09.15"></script>
+<script src="ranking.js?v=2026.09.15"></script>
+<script src="armar.js?v=2026.09.15"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */
 
@@ -937,16 +958,32 @@ function pantallaNacimiento(sesion, errorTexto) {
 
 /* ---------------------------------------------------------------- arranque */
 
+/**
+ * Prende la franja si el servidor dice que esta es la copia de prueba. Se llama
+ * con lo que conteste cualquiera de las dos puertas de entrada —`/api/sesion` o
+ * `/api/plantel`—, así la franja está desde la primera pantalla y no recién
+ * después de entrar.
+ */
+function marcarAmbiente(respuesta) {
+  if (respuesta && respuesta.ambiente === 'prueba') {
+    document.getElementById('franja-prueba').hidden = false;
+    document.title = 'PRUEBA · San Diego Polo';
+  }
+}
+
 (async function arrancar() {
   try {
     const sesion = await pedir('/api/sesion');
+    marcarAmbiente(sesion);
     if (sesion.jugador.faltaNacimiento) pantallaNacimiento(sesion);
     else adentro(sesion.jugador, sesion.temporada, sesion.cumples);
     return;
   } catch (e) { /* sin sesión: a elegir nombre */ }
 
   try {
-    plantelPublico = (await pedir('/api/plantel')).jugadores;
+    const r = await pedir('/api/plantel');
+    marcarAmbiente(r);
+    plantelPublico = r.jugadores;
     pantallaNombre();
   } catch (e) {
     vaciar(app);

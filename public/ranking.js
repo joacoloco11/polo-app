@@ -187,13 +187,36 @@ function vistaRanking(raiz) {
     el('button', {
       class: 'primary', type: 'button',
       onclick: (e) => Hoja.compartirCanvas(
-        rankingEnCanvas(paraCompartir(ordenada), orden),
+        rankingEnCanvas(paraCompartir(ordenada), orden).canvas,
         'ranking-san-diego.jpg',
         e.currentTarget,
+        invitacion(),
       ),
     }, [icono('compartir', 16), 'Compartir el ranking en JPG']),
+    el('button', {
+      class: 'ghost', type: 'button',
+      onclick: (e) => {
+        const armado = rankingEnCanvas(paraCompartir(ordenada), orden, true);
+        Hoja.compartirPDF(armado.canvas, 'ranking-san-diego.pdf', e.currentTarget,
+          armado.enlaces, invitacion());
+      },
+    }, [icono('compartir', 16), 'En PDF, con el botón para entrar']),
+  ]));
+
+  raiz.appendChild(el('p', { class: 'pista' }, [
+    'El JPG se ve en el chat sin abrir nada, pero adentro de una imagen no hay '
+    + 'nada para tocar: el link viaja en el mensaje. El PDF trae un botón de '
+    + 'verdad, aunque hay que abrirlo para verlo.',
   ]));
 }
+
+/**
+ * El mensaje que viaja al lado del archivo. Es lo único tocable con seguridad:
+ * WhatsApp convierte en link cualquier dirección que encuentre en el texto.
+ */
+const invitacion = () => 'Ranking del club'
+  + (ranking.temporada ? ' · ' + ranking.temporada.nombre : '')
+  + '\nMirá tus caballos, tus chukkers y tu ficha en la app: ' + location.origin;
 
 /* ------------------------------------------------- el ranking para el grupo */
 
@@ -258,17 +281,25 @@ function flechaEnCanvas(ctx, posicion, cx, cy, largo) {
  *
  * El pie es la parte que trabaja: el que está en la lista y todavía no entró a
  * la app ve ahí qué se está perdiendo.
+ *
+ * Con `conBoton` dibuja abajo un botón de verdad y devuelve dónde quedó, para
+ * que el PDF le pegue el enlace encima. En el JPG ese botón **no va**: un
+ * dibujo de botón que no se puede tocar es peor que no tenerlo, así que ahí va
+ * la dirección escrita y nada más.
+ *
+ * Devuelve `{ canvas, enlaces }`.
  */
-function rankingEnCanvas(lista, orden) {
+function rankingEnCanvas(lista, orden, conBoton) {
   const M = JPG_RANKING;
   const ancho = M.ancho;
   const podio = lista.slice(0, 3);
   const resto = lista.slice(3);
+  const enlaces = [];
 
   const cabeceraAlto = 300;
   const podioAlto = podio.length * (M.podio + 16);
   const tablaAlto = resto.length ? 54 + resto.length * M.fila : 0;
-  const pieAlto = 210;
+  const pieAlto = conBoton ? 318 : 210;
   const alto = cabeceraAlto + podioAlto + tablaAlto + pieAlto;
 
   const canvas = document.createElement('canvas');
@@ -412,13 +443,38 @@ function rankingEnCanvas(lista, orden) {
   ctx.fillText('Mirá tus caballos, tus chukkers y tu ficha', x, y);
   ctx.fillText('en la app del club.', x, y + 40);
 
-  ctx.fillStyle = M.teal;
-  ctx.font = jpgSans(26, '600');
-  ctx.textAlign = 'right';
-  ctx.fillText(location.host, derecha, y + 40);
-  ctx.textAlign = 'left';
+  if (conBoton) {
+    const bx = x;
+    const by = y + 74;
+    const bancho = 400;
+    const balto = 68;
+    ctx.fillStyle = M.teal;
+    rectaRedonda(ctx, bx, by, bancho, balto, 12);
+    ctx.fill();
 
-  y += 88;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = jpgSans(28, '700');
+    ctx.textAlign = 'center';
+    ctx.fillText('ENTRAR A LA APP', bx + bancho / 2, by + 44);
+    ctx.textAlign = 'left';
+
+    ctx.fillStyle = M.suave;
+    ctx.font = jpgSans(24);
+    ctx.textAlign = 'right';
+    ctx.fillText(location.host, derecha, by + 44);
+    ctx.textAlign = 'left';
+
+    enlaces.push({ x: bx, y: by, ancho: bancho, alto: balto, url: location.origin });
+    y = by + balto + 44;
+  } else {
+    ctx.fillStyle = M.teal;
+    ctx.font = jpgSans(26, '600');
+    ctx.textAlign = 'right';
+    ctx.fillText(location.host, derecha, y + 40);
+    ctx.textAlign = 'left';
+    y += 88;
+  }
+
   [[2, 'viene en alza'], [0, 'se mantiene'], [-2, 'viene en baja']].forEach(([p, texto], i) => {
     const cx = x + i * 250;
     flechaEnCanvas(ctx, p, cx + 11, y - 8, 22);
@@ -427,7 +483,7 @@ function rankingEnCanvas(lista, orden) {
     ctx.fillText(texto, cx + 32, y);
   });
 
-  return canvas;
+  return { canvas, enlaces };
 }
 
 /** Un rectángulo con las esquinas redondeadas, que el canvas no trae de fábrica. */
