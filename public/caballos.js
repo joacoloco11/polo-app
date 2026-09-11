@@ -1044,34 +1044,45 @@ function enTexto(cosas) {
  * Como se manda al grupo: el número del chukker y el caballo, sin más palabras.
  * En el torneo los dos medios van en el mismo renglón — "3: Malvina / Pampa" —
  * que es como se lee de un vistazo.
+ *
+ * En la práctica va también el color del equipo, en su propio renglón: el que
+ * prepara los caballos necesita saber de qué juega, y es lo primero que se
+ * pregunta. En un partido de torneo no hay color nuestro, así que no va nada.
+ *
+ * El puntaje va pegado al caballo en su renglón —"3: Malvina 7"— y no en una
+ * lista aparte: el mismo caballo sale varios chukkers y repetirlo abajo obliga
+ * a buscar. El "/10" no se escribe; se entiende.
  */
 function textoDeCaballos(evento) {
   const nombreDe = (id) => (caballos.caballada.find((c) => c.id === id) || {}).nombre || '—';
+  const conPuntaje = (id) => {
+    const p = evento.puntajes[id];
+    return nombreDe(id) + (p === undefined || p === null ? '' : ' ' + p);
+  };
   const lineas = [
     evento.tipo === 'aap'
       ? evento.titulo + ' — ' + Hoja.fechaCorta(evento.fecha)
       : 'Caballos — ' + Hoja.fechaCorta(evento.fecha) + ' · ' + evento.detalle,
-    '',
   ];
+
+  if (evento.color && Hoja.LABEL[evento.color]) {
+    lineas.push('Juego de ' + Hoja.LABEL[evento.color]);
+  }
+  lineas.push('');
 
   if (evento.medios) {
     for (let c = 1; c <= evento.chukkers; c++) {
       const primero = evento.uso[c * 2 - 1];
       const segundo = evento.uso[c * 2];
       if (!primero && !segundo) continue;
-      lineas.push(c + ': ' + nombreDe(primero) + ' / ' + nombreDe(segundo));
+      lineas.push(c + ': ' + conPuntaje(primero) + ' / ' + conPuntaje(segundo));
     }
   } else {
     evento.misChukkers.forEach((c) => {
-      lineas.push(c + ': ' + nombreDe(evento.uso[c]));
+      lineas.push(c + ': ' + conPuntaje(evento.uso[c]));
     });
   }
 
-  const puntuados = Object.keys(evento.puntajes);
-  if (puntuados.length) {
-    lineas.push('');
-    puntuados.forEach((id) => lineas.push(nombreDe(id) + ': ' + evento.puntajes[id] + '/10'));
-  }
   if (evento.observaciones) {
     lineas.push('', evento.observaciones);
   }
