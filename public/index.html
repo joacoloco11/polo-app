@@ -797,19 +797,22 @@
      el que tenía guardado. Cambia con cada versión que se publica, junto con
      `lib/version.js`. Sin esto, uno sube los archivos y sigue viendo la app
      vieja hasta que se le ocurre limpiar el navegador. -->
-<script src="logo.js?v=2026.09.15"></script>
-<script src="hoja.js?v=2026.09.15"></script>
-<script src="comun.js?v=2026.09.15"></script>
-<script src="caballos.js?v=2026.09.15"></script>
-<script src="usocanchas.js?v=2026.09.15"></script>
-<script src="ranking.js?v=2026.09.15"></script>
-<script src="armar.js?v=2026.09.15"></script>
+<script src="logo.js?v=2026.09.16"></script>
+<script src="hoja.js?v=2026.09.16"></script>
+<script src="comun.js?v=2026.09.16"></script>
+<script src="caballos.js?v=2026.09.16"></script>
+<script src="usocanchas.js?v=2026.09.16"></script>
+<script src="ranking.js?v=2026.09.16"></script>
+<script src="armar.js?v=2026.09.16"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */
 
 const app = document.getElementById('app');
 let plantelPublico = [];
 let quien = null;
+// Si esta copia se entra con una llave compartida. Lo dice el servidor; en la
+// app del club siempre es false.
+let conLlave = false;
 let filtro = '';
 
 function pantallaNombre(mensaje) {
@@ -844,7 +847,8 @@ function pantallaNombre(mensaje) {
           el('b', {}, [j.apodo]),
           el('span', {}, [j.nombre]),
         ]),
-        j.activado ? null : el('span', { class: 'marca' }, ['NUEVO']),
+        // Con llave compartida, "NUEVO" no significa nada: nadie da de alta su PIN.
+        (j.activado || conLlave) ? null : el('span', { class: 'marca' }, ['NUEVO']),
       ]));
     });
   }
@@ -855,7 +859,9 @@ function pantallaNombre(mensaje) {
 
 function pantallaPin(errorTexto) {
   vaciar(app);
-  const primeraVez = !quien.activado;
+  // En la copia de prueba con llave no se da de alta ningún PIN: se entra con
+  // el que te pasaron, tenga o no tenga PIN propio ese jugador.
+  const primeraVez = !quien.activado && !conLlave;
 
   app.appendChild(titulo(primeraVez ? 'Elegí tu PIN' : 'Tu PIN'));
   app.appendChild(el('div', { class: 'card', style: 'padding:13px 15px;margin-bottom:14px' }, [
@@ -885,7 +891,10 @@ function pantallaPin(errorTexto) {
   ]));
 
   if (errorTexto) app.appendChild(aviso('mal', errorTexto));
-  else if (primeraVez) {
+  else if (conLlave) {
+    app.appendChild(aviso('nota',
+      'Esta es la versión de prueba: entrá con el PIN que te pasaron. No es tu PIN del club y no se guarda nada tuyo acá.'));
+  } else if (primeraVez) {
     app.appendChild(aviso('nota',
       'Es tu primera vez: el PIN que pongas ahora queda como el tuyo. Elegí cuatro números que te acuerdes — si te lo olvidás, te lo resetea un administrador.'));
   }
@@ -983,6 +992,7 @@ function marcarAmbiente(respuesta) {
   try {
     const r = await pedir('/api/plantel');
     marcarAmbiente(r);
+    conLlave = !!r.conLlave;
     plantelPublico = r.jugadores;
     pantallaNombre();
   } catch (e) {
