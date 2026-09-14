@@ -10,7 +10,7 @@
  * abajo de la pantalla se lee otra, el celular se quedó con el código viejo y
  * lo único que hace falta es recargar.
  */
-const VERSION = '2026.09.18';
+const VERSION = '2026.09.20';
 
 const estado = {
   jugador: null,     // quién entró
@@ -56,6 +56,8 @@ const titulo = (texto) => el('h1', { class: 'titulo' }, [texto]);
  * Estos son de trazo, sobre una grilla de 20, y toman el color del texto.
  */
 const TRAZOS = {
+  // Un tilde adentro del círculo: anotarse es decir que sí.
+  anotacion: 'M16.6 10a6.6 6.6 0 1 1-3.3-5.7M6.8 10.2l2.6 2.6 7-7.4',
   armar: 'M3 6h3l8 8h3M3 14h3l8-8h3M15 3.5L17.5 6 15 8.5M15 11.5L17.5 14 15 16.5',
   practicas: 'M4 6a2 2 0 012-2h8a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V6z'
     + 'M8 4.2V3.4a1 1 0 011-1h2a1 1 0 011 1v.8M7.5 9.5h5M7.5 13h3.5',

@@ -135,6 +135,49 @@ create table if not exists chukker_extra (
 
 create index if not exists chukker_extra_caballo_idx on chukker_extra (caballo_id, fecha desc);
 
+-- -------------------------------------------------------------- anotaciones
+
+-- La convocatoria es el día de juego ANTES de que exista ninguna práctica: el
+-- admin publica "viernes 19, 20 hs" y la gente se anota. Recién después, con
+-- los anotados a la vista, se arman una o varias prácticas.
+--
+-- Por qué es una tabla aparte y no un campo de `practica`: de una convocatoria
+-- salen dos prácticas si se anotan 18, y ninguna si no junta gente. La lista de
+-- anotados es del día, no de una planilla.
+--
+-- La cancha no está acá a propósito: se elige al armar, cuando ya se sabe
+-- cuántas hacen falta.
+create table if not exists convocatoria (
+  id           uuid primary key default gen_random_uuid(),
+  temporada_id uuid not null references temporada (id) on delete restrict,
+  fecha        date not null,
+  hora         time not null,
+  notas        text,
+  -- Cerrada = no se anota nadie más. No borra nada: la lista queda.
+  cerrada_en   timestamptz,
+  creada_por   uuid references jugador (id) on delete set null,
+  creada_en    timestamptz not null default now()
+);
+
+-- Un día, una convocatoria. Si el club algún día juega mañana y tarde, esto se
+-- cambia por un índice sobre (fecha, hora).
+create unique index if not exists convocatoria_fecha_idx on convocatoria (fecha);
+
+-- Quién tocó JUEGO, y cuándo. El `creada_en` no es un metadato: es el orden de
+-- llegada, que es lo que decide quién entra cuando sobra gente, y es lo que se
+-- muestra al lado de cada nombre.
+create table if not exists anotacion (
+  id              uuid primary key default gen_random_uuid(),
+  convocatoria_id uuid not null references convocatoria (id) on delete cascade,
+  jugador_id      uuid not null references jugador (id) on delete cascade,
+  -- true = lo sumó un admin a mano porque no llegó a anotarse. Se ve distinto.
+  a_mano          boolean not null default false,
+  creada_en       timestamptz not null default now(),
+  unique (convocatoria_id, jugador_id)
+);
+
+create index if not exists anotacion_orden_idx on anotacion (convocatoria_id, creada_en);
+
 -- ---------------------------------------------------------------- prácticas
 
 create table if not exists practica (
@@ -156,6 +199,21 @@ create table if not exists practica (
 );
 
 create index if not exists practica_temporada_fecha_idx on practica (temporada_id, fecha desc);
+
+-- De qué convocatoria salió esta práctica. Va como `add column` y no adentro
+-- del `create table` porque la tabla ya existe en las bases publicadas.
+-- Queda en null en las prácticas viejas y en las que el admin arme a mano sin
+-- pasar por la lista de anotados, que sigue siendo posible.
+alter table practica add column if not exists convocatoria_id uuid;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'practica_convocatoria_fk') then
+    alter table practica add constraint practica_convocatoria_fk
+      foreign key (convocatoria_id) references convocatoria (id) on delete set null;
+  end if;
+end $$;
+
+create index if not exists practica_convocatoria_idx on practica (convocatoria_id);
 
 -- La cantidad de chukkers no es libre: sale del formato.
 create or replace function chukkers_del_formato(formato smallint)
@@ -676,6 +734,28 @@ drop policy if exists leer_obs_canchas on observacion_cancha;
 create policy leer_obs_canchas on observacion_cancha for select using (true);
 drop policy if exists admin_obs_canchas on observacion_cancha;
 create policy admin_obs_canchas on observacion_cancha for all using (es_admin()) with check (es_admin());
+
+-- La convocatoria la ve todo el club —si no, nadie podría anotarse— y la abre
+-- y la cierra un administrador.
+alter table convocatoria enable row level security;
+drop policy if exists leer_convocatoria on convocatoria;
+create policy leer_convocatoria on convocatoria for select using (true);
+drop policy if exists admin_convocatoria on convocatoria;
+create policy admin_convocatoria on convocatoria for all using (es_admin()) with check (es_admin());
+
+-- La lista de anotados también la ve todo el club: que se vea quién se va
+-- sumando es parte de cómo funciona.
+--
+-- Anotarse y bajarse, en cambio, es cosa de cada uno. Un administrador puede
+-- sumar o sacar a cualquiera, que es lo que permite agregar al que no llegó a
+-- anotarse. Nadie más puede anotar a otro.
+alter table anotacion enable row level security;
+drop policy if exists leer_anotaciones on anotacion;
+create policy leer_anotaciones on anotacion for select using (true);
+drop policy if exists mis_anotaciones on anotacion;
+create policy mis_anotaciones on anotacion for all
+  using (jugador_id = jugador_actual() or es_admin())
+  with check (jugador_id = jugador_actual() or es_admin());
 
 -- Control de que quedó todo armado. Los avisos amarillos de "does not exist,
 -- skipping" son normales: es el archivo fijándose qué falta antes de crearlo.

@@ -27,6 +27,7 @@ const RUTAS = {
   plantel: require('../lib/rutas/plantel'),
   diagnostico: require('../lib/rutas/diagnostico'),
   jugadores: require('../lib/rutas/jugadores'),
+  anotaciones: require('../lib/rutas/anotaciones'),
   practicas: require('../lib/rutas/practicas'),
   practica: require('../lib/rutas/practica'),
   caballos: require('../lib/rutas/caballos'),
