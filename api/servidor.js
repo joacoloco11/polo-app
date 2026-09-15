@@ -31,6 +31,7 @@ const RUTAS = {
   practicas: require('../lib/rutas/practicas'),
   practica: require('../lib/rutas/practica'),
   caballos: require('../lib/rutas/caballos'),
+  caballada: require('../lib/rutas/caballada'),
   jornadas: require('../lib/rutas/jornadas'),
   jornada: require('../lib/rutas/jornada'),
   resultado: require('../lib/rutas/resultado'),

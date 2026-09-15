@@ -117,6 +117,44 @@ create index if not exists lesion_caballo_idx on lesion (caballo_id, desde desc)
 create unique index if not exists lesion_abierta_unica
   on lesion (caballo_id) where hasta is null;
 
+-- ------------------------------------------------ la caballada compartida
+--
+-- Hay jugadores que se prestan los caballos todo el tiempo: los de uno los
+-- monta el otro y al revés. Contados por separado, ningún caballo tiene su
+-- carga real y el nombre aparece dos veces, una por dueño.
+--
+-- El grupo los junta. Los caballos de todos los que están ADENTRO se usan como
+-- si fueran propios —para cargar chukkers y para las estadísticas— y los que se
+-- llaman igual se muestran como uno solo.
+--
+-- Nadie entra porque otro lo marque: se invita y el invitado acepta desde su
+-- app. Hasta que acepta no se ve nada de los dos lados.
+create table if not exists grupo_caballada (
+  id         uuid primary key default gen_random_uuid(),
+  nombre     text not null,
+  creado_por uuid not null references jugador (id) on delete cascade,
+  creado_en  timestamptz not null default now()
+);
+
+create table if not exists grupo_miembro (
+  grupo_id     uuid not null references grupo_caballada (id) on delete cascade,
+  jugador_id   uuid not null references jugador (id) on delete cascade,
+  -- 'invitado' mientras no contestó; 'adentro' cuando aceptó.
+  estado       text not null default 'invitado'
+               check (estado in ('invitado', 'adentro')),
+  invitado_por uuid references jugador (id) on delete set null,
+  desde        timestamptz not null default now(),
+  primary key (grupo_id, jugador_id)
+);
+
+create index if not exists grupo_miembro_jugador_idx on grupo_miembro (jugador_id);
+
+-- En un grupo por vez. Invitaciones puede tener las que sea —contestar que sí a
+-- una lo saca de la otra— pero adentro está en uno solo, así que "los caballos
+-- de mi grupo" nunca es ambiguo.
+create unique index if not exists grupo_miembro_uno_adentro
+  on grupo_miembro (jugador_id) where estado = 'adentro';
+
 -- Chukkers que el caballo jugó FUERA de la práctica del club: en otro club, en
 -- un partido de otro, prestado a otro jinete. No hay planilla que los tenga,
 -- pero las patas del caballo sí, así que cuentan igual para la carga.
@@ -466,6 +504,56 @@ create table if not exists jornada_chukker (
 
 create index if not exists jornada_chukker_caballo_idx on jornada_chukker (caballo_id);
 
+-- ------------------------------------------------------- el medio chukker
+--
+-- Un caballo puede hacer media cancha y salir, y ahí entra otro. Eso pasa en
+-- cualquier práctica, no solo en los torneos, así que el lugar dejó de ser "el
+-- chukker" y pasó a ser "el chukker y qué mitad":
+--
+--   mitad 0  el chukker entero
+--   mitad 1  el primer medio
+--   mitad 2  el segundo medio
+--
+-- El chukker 3 puede tener una fila con mitad 0 —un caballo lo jugó entero— o
+-- dos con mitad 1 y 2, que lo hicieron dos. Nunca las tres a la vez: eso lo
+-- cuida la pantalla, y de última sumaría de más en la carga del animal, que es
+-- un error visible y no un dato roto.
+alter table jornada_chukker add column if not exists mitad smallint not null default 0;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'jornada_chukker_mitad_valida') then
+    alter table jornada_chukker add constraint jornada_chukker_mitad_valida
+      check (mitad between 0 and 2);
+  end if;
+end $$;
+
+-- La clave ahora incluye la mitad. Antes era (jornada, chukker), y eso dejaba
+-- entrar un solo caballo por chukker.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+     where conname = 'jornada_chukker_pkey'
+       and pg_get_constraintdef(oid) = 'PRIMARY KEY (jornada_id, chukker)'
+  ) then
+    alter table jornada_chukker drop constraint jornada_chukker_pkey;
+    alter table jornada_chukker add primary key (jornada_id, chukker, mitad);
+  end if;
+end $$;
+
+-- Los torneos de a medio guardaban el lugar corrido —del 1 al 12 para seis
+-- chukkers—. Ahora eso se dice con el chukker y la mitad: es lo mismo, pero se
+-- entiende leyendo la tabla. Se pasa una vez sola; la segunda corrida no
+-- encuentra ninguna fila.
+--
+-- No hay choque de claves aunque se mueva todo de una: las filas viejas tienen
+-- mitad 0 y todas las nuevas quedan en 1 o 2.
+update jornada_chukker jc
+   set chukker = ceil(jc.chukker / 2.0)::smallint,
+       mitad   = case when jc.chukker % 2 = 1 then 1 else 2 end
+  from jornada j
+ where j.id = jc.jornada_id and j.medios and jc.mitad = 0;
+
 -- Cómo anduvo el caballo ese día. Es por jornada y no por chukker: el jugador
 -- lo puntúa una vez, al terminar.
 create table if not exists jornada_puntaje (
@@ -628,6 +716,19 @@ create or replace function es_admin() returns boolean language sql stable as $$
   select coalesce((select es_admin from jugador where id = jugador_actual()), false);
 $$;
 
+-- ¿Ese jugador comparte caballada conmigo? Uno mismo siempre; los demás, solo
+-- si los dos están ADENTRO del mismo grupo. Es lo que abre los caballos del
+-- otro para cargarles chukkers sin abrir nada más de su cuenta.
+create or replace function en_mi_grupo(otro uuid) returns boolean language sql stable as $$
+  select otro = jugador_actual() or exists (
+    select 1
+      from grupo_miembro yo
+      join grupo_miembro el on el.grupo_id = yo.grupo_id
+     where yo.jugador_id = jugador_actual() and yo.estado = 'adentro'
+       and el.jugador_id = otro            and el.estado = 'adentro'
+  );
+$$;
+
 -- La tabla de jugadores en crudo la leen SOLO los admin: ahí viven el hash del
 -- PIN y el handicap interno del club, que el jugador no tiene que ver.
 drop policy if exists leer_jugadores on jugador;
@@ -659,27 +760,56 @@ create policy admin_torneos on torneo for all using (es_admin()) with check (es_
 drop policy if exists leer_caballos on caballo;
 create policy leer_caballos on caballo          for select using (true);
 -- Cada uno maneja su propia caballada y su propia carga. Los caballos de otro
--- no se ven: es información suya, y el ranking de participación no la usa.
+-- no se ven —es información suya, y el ranking de participación no la usa—
+-- salvo que los dos hayan aceptado compartirla en un grupo.
 drop policy if exists mi_caballada on caballo;
 create policy mi_caballada on caballo for all
-  using (jugador_id = jugador_actual() or es_admin())
-  with check (jugador_id = jugador_actual() or es_admin());
+  using (en_mi_grupo(jugador_id) or es_admin())
+  with check (en_mi_grupo(jugador_id) or es_admin());
 
--- Los chukkers de afuera son del dueño del caballo, igual que las lesiones.
+-- Los chukkers de afuera van con el caballo, igual que las lesiones: quien
+-- puede montarlo puede anotarle lo que jugó.
 alter table chukker_extra enable row level security;
 drop policy if exists mis_extras on chukker_extra;
 create policy mis_extras on chukker_extra for all
   using (exists (select 1 from caballo c where c.id = caballo_id
-                   and (c.jugador_id = jugador_actual() or es_admin())))
+                   and (en_mi_grupo(c.jugador_id) or es_admin())))
   with check (exists (select 1 from caballo c where c.id = caballo_id
-                        and (c.jugador_id = jugador_actual() or es_admin())));
+                        and (en_mi_grupo(c.jugador_id) or es_admin())));
 
 drop policy if exists mis_lesiones on lesion;
 create policy mis_lesiones on lesion for all
   using (exists (select 1 from caballo c where c.id = caballo_id
-                   and (c.jugador_id = jugador_actual() or es_admin())))
+                   and (en_mi_grupo(c.jugador_id) or es_admin())))
   with check (exists (select 1 from caballo c where c.id = caballo_id
-                        and (c.jugador_id = jugador_actual() or es_admin())));
+                        and (en_mi_grupo(c.jugador_id) or es_admin())));
+
+-- El grupo lo ve quien está en él —adentro o invitado— y lo maneja el que lo
+-- creó. Cada uno contesta su propia invitación y se sale cuando quiere: esa es
+-- la fila donde `jugador_id` es él.
+alter table grupo_caballada enable row level security;
+drop policy if exists mi_grupo on grupo_caballada;
+create policy mi_grupo on grupo_caballada for all
+  using (creado_por = jugador_actual() or es_admin()
+         or exists (select 1 from grupo_miembro m
+                     where m.grupo_id = id and m.jugador_id = jugador_actual()))
+  with check (creado_por = jugador_actual() or es_admin());
+
+alter table grupo_miembro enable row level security;
+drop policy if exists leer_mi_grupo on grupo_miembro;
+create policy leer_mi_grupo on grupo_miembro for select
+  using (es_admin()
+         or exists (select 1 from grupo_miembro yo
+                     where yo.grupo_id = grupo_id and yo.jugador_id = jugador_actual()));
+
+drop policy if exists tocar_mi_grupo on grupo_miembro;
+create policy tocar_mi_grupo on grupo_miembro for all
+  using (jugador_id = jugador_actual() or es_admin()
+         or exists (select 1 from grupo_caballada g
+                     where g.id = grupo_id and g.creado_por = jugador_actual()))
+  with check (jugador_id = jugador_actual() or es_admin()
+              or exists (select 1 from grupo_caballada g
+                          where g.id = grupo_id and g.creado_por = jugador_actual()));
 
 drop policy if exists mis_jornadas on jornada;
 create policy mis_jornadas on jornada for all

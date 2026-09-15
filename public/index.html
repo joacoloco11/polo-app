@@ -431,6 +431,34 @@
   .sello.bicolor { background: rgba(160,119,34,.10); color: var(--gold); }
   .sello.aap { background: rgba(147,51,234,.10); color: #c084fc; }
 
+  /* --- la caballada compartida --- */
+  /* El interruptor de arriba: mis caballos o los del grupo. */
+  .chips.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .chip.grande { padding: 9px 8px; line-height: 1.2; }
+  .chip.grande em { display: block; font-style: normal; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  /* El cartel de la invitación, arriba de todo: es lo primero que se contesta. */
+  .invita {
+    border: 1px solid var(--teal); background: rgba(0,137,122,.07);
+    border-radius: 11px; padding: 14px; margin-top: 14px;
+  }
+  .invita b { display: block; font-family: var(--serif); font-size: 16px; font-weight: 600; margin-bottom: 5px; }
+  .invita p { font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
+  .invita .dos-botones { margin-top: 0; }
+  .invita .primary { padding: 12px; font-size: 14px; min-height: 44px; }
+  /* El tilde de quién está en el grupo, y de a quién estás invitando. */
+  .casilla {
+    width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--line);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff;
+  }
+  .casilla.puesta { background: var(--teal); border-color: var(--teal); }
+  .casilla.esperando { border-color: var(--gold); border-style: dashed; }
+  .falso-campo {
+    width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+    padding: 12px 14px; font-size: 15px; color: var(--ink);
+  }
+  /* De quién es el caballo, abajo del nombre. */
+  .cab-head b u { display: block; text-decoration: none; font-family: var(--sans); font-size: 10.5px; color: var(--muted); font-weight: 400; margin-top: 1px; }
+
   .caballo { background: var(--ground); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
   .caballo.usado { border-color: var(--teal); }
   .caballo.lesionado { border-color: var(--rojo); }
@@ -470,8 +498,18 @@
   /* --- los chukkers jugados fuera del club --- */
   /* La casilla no es un lugar más de la práctica: va al final, más ancha, con
      la palabra, y separada de las seis por una raya. */
-  .chuk.extra { width: auto; padding: 0 13px; font-size: 12px; letter-spacing: .4px; }
+  .chuk.extra, .chuk.ancho { width: auto; padding: 0 13px; font-size: 12px; letter-spacing: .4px; }
   .chuk.extra[data-estado="cargado"] { border-color: var(--teal); color: var(--teal); font-weight: 600; }
+  /* El botón que parte los chukkers al medio para un caballo. Prendido no se
+     pinta entero como una casilla puesta: no es un lugar, es un modo. */
+  .chuk.ancho[data-estado="mio"] {
+    background: rgba(0,137,122,.09); border-color: var(--teal); color: var(--teal); font-weight: 700;
+  }
+  /* Un chukker que ya tiene medio tomado por otro caballo: se pinta la mitad
+     para que se vea que está ocupado, sin mentir que lo está entero. */
+  .chuk.a-medias {
+    background: linear-gradient(to right, rgba(107,120,145,.28) 0 50%, transparent 50% 100%);
+  }
   .sep-chuk { width: 1px; height: 26px; background: var(--line); margin: 0 3px; align-self: center; }
   .extra-panel { background: var(--surface); border-radius: 10px; padding: 12px 12px 4px; margin-top: 10px; }
   .extra-panel .acciones { margin-top: 4px; }
@@ -879,14 +917,14 @@
      el que tenía guardado. Cambia con cada versión que se publica, junto con
      `lib/version.js`. Sin esto, uno sube los archivos y sigue viendo la app
      vieja hasta que se le ocurre limpiar el navegador. -->
-<script src="logo.js?v=2026.09.20"></script>
-<script src="hoja.js?v=2026.09.20"></script>
-<script src="comun.js?v=2026.09.20"></script>
-<script src="caballos.js?v=2026.09.20"></script>
-<script src="usocanchas.js?v=2026.09.20"></script>
-<script src="ranking.js?v=2026.09.20"></script>
-<script src="anotacion.js?v=2026.09.20"></script>
-<script src="armar.js?v=2026.09.20"></script>
+<script src="logo.js?v=2026.09.22"></script>
+<script src="hoja.js?v=2026.09.22"></script>
+<script src="comun.js?v=2026.09.22"></script>
+<script src="caballos.js?v=2026.09.22"></script>
+<script src="usocanchas.js?v=2026.09.22"></script>
+<script src="ranking.js?v=2026.09.22"></script>
+<script src="anotacion.js?v=2026.09.22"></script>
+<script src="armar.js?v=2026.09.22"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */
 
