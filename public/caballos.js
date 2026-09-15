@@ -177,10 +177,14 @@ const unoSolo = (c) => ({ ...c, ids: [c.id], duenios: c.duenio ? [c.duenio] : []
 function laCaballada() {
   const vivos = caballos.caballada.filter((c) => c.activo && !c.fuera);
 
-  if (caballos.deQuien !== 'grupo' || !hayGrupo()) {
-    return vivos.filter((c) => c.mio !== false).map(unoSolo);
-  }
+  // Sin grupo no hay nada que juntar: cada caballo es el suyo.
+  if (!hayGrupo()) return vivos.filter((c) => c.mio !== false).map(unoSolo);
 
+  /* Con grupo se juntan SIEMPRE los que se llaman igual, esté puesto el
+     interruptor donde esté. Un caballo que los dos anotaron es uno solo, y en
+     "Mis caballos" tiene que aparecer con toda su carga —también la que le hizo
+     el otro—, no con la mitad. Lo que decide el interruptor es a cuáles se
+     mira, no cómo se cuentan. */
   const porClave = new Map();
   vivos.forEach((c) => {
     const k = c.clave || c.id;
@@ -196,7 +200,12 @@ function laCaballada() {
     // Un caballo lesionado lo está para los dos: es la misma pata.
     if (c.lesionado) { ya.lesionado = true; ya.lesionado_desde = c.lesionado_desde; }
   });
-  return [...porClave.values()];
+  // Primero los propios y después los del grupo: uno busca los suyos, y con
+  // dos caballadas juntas una lista alfabética los deja salteados.
+  return [...porClave.values()]
+    .filter((c) => caballos.deQuien === 'grupo' || c.mio)
+    .sort((a, b) => (b.mio ? 1 : 0) - (a.mio ? 1 : 0)
+      || a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 /** El caballo de la lista que ocupa ese lugar, si hay alguno. */
@@ -754,8 +763,12 @@ function panelCargar(raiz) {
     const i = todosLosLugares.findIndex((l) => ids.includes(evento.uso[l]));
     return i === -1 ? Infinity : i;
   };
+  // Los que salen primero arriba; entre los que hoy no salen, los míos antes
+  // que los del grupo.
   const activos = lista.slice().sort((a, b) =>
-    (primerLugar(a) - primerLugar(b)) || a.nombre.localeCompare(b.nombre, 'es'));
+    (primerLugar(a) - primerLugar(b))
+    || ((b.mio ? 1 : 0) - (a.mio ? 1 : 0))
+    || a.nombre.localeCompare(b.nombre, 'es'));
   const caja = el('div', { class: 'lista' });
 
   activos.forEach((caballo) => {
@@ -950,8 +963,8 @@ function panelCargar(raiz) {
  * y para las estadísticas: es la misma pregunta —de quién es esta caballada—.
  */
 function interruptorDeCaballada() {
-  const mios = caballos.caballada.filter((c) => c.activo && c.mio !== false).length;
-  const todos = laCaballadaEntera().length;
+  const mios = cuantasTarjetas('mios');
+  const todos = cuantasTarjetas('grupo');
   const boton = (clave, texto, cuantos) => el('button', {
     type: 'button', class: 'chip grande', 'aria-pressed': caballos.deQuien === clave,
     onclick: () => { caballos.deQuien = clave; render(); },
@@ -963,13 +976,13 @@ function interruptorDeCaballada() {
   ]);
 }
 
-/** Cuántas tarjetas hay con el grupo puesto, ya unificadas por nombre. */
-function laCaballadaEntera() {
+/** Cuántas tarjetas hay de cada lado, ya unificadas por nombre. */
+function cuantasTarjetas(deQuien) {
   const antes = caballos.deQuien;
-  caballos.deQuien = 'grupo';
+  caballos.deQuien = deQuien;
   const lista = laCaballada();
   caballos.deQuien = antes;
-  return lista;
+  return lista.length;
 }
 
 /**
@@ -1505,6 +1518,9 @@ function estadisticas() {
   const stats = vistas.concat(viejos).map((caballo) => ({
     caballo, chukkers: 0, practicas: 0, torneos: 0, jornadas: 0,
     puntajes: [], ultimo: null, chukkers7: 0, chukkers30: 0,
+    // Cuánto de esa carga la hiciste vos y cuánto otro del grupo. El caballo
+    // que jugó todo con el otro se marca: es su carga igual, pero no lo viste.
+    mios: 0, deOtros: 0, jinetes: [],
   }));
 
   // De cualquier id de caballo a su tarjeta: los que se llaman igual caen en
@@ -1527,6 +1543,7 @@ function estadisticas() {
       if (!s) return;
       const peso = pesoDeLugar(lugar);
       sumar(s, peso, dias);
+      s.mios += peso;
       if (ev.tipo === 'aap') s.torneos += peso;
       else s.practicas += peso;
       enEste.add(s);
@@ -1540,23 +1557,25 @@ function estadisticas() {
     });
   });
 
-  /* Lo que los del grupo le cargaron a estos mismos caballos. Sin esto, un
-     caballo prestado mostraría solo la mitad de lo que jugó: la que monté yo.
-     Solo cuando se está mirando la caballada del grupo — con "Mis caballos"
-     puesto, la cuenta es la de mi cuaderno. */
-  if (caballos.deQuien === 'grupo') {
-    (caballos.ajenos || []).forEach((a) => {
-      const s = porId.get(a.caballo_id);
-      if (!s) return;
-      const dias = diasDesde(a.fecha);
-      sumar(s, a.chukkers, dias);
-      if (a.torneo) s.torneos += a.chukkers;
-      else s.practicas += a.chukkers;
-      s.jornadas++;
-      if (a.puntaje) s.puntajes.push(a.puntaje);
-      if (!s.ultimo || a.fecha > s.ultimo) s.ultimo = a.fecha;
-    });
-  }
+  /* Lo que los del grupo le cargaron a estos mismos caballos.
+
+     Va siempre, también con "Mis caballos" puesto: la carga de un animal es la
+     carga del animal, y si mi caballo lo montó otro tres chukkers, ese caballo
+     jugó tres chukkers. Lo que cambia es que queda marcado como que no lo
+     jugué yo, y el puntaje que le puso el otro se muestra igual. */
+  (caballos.ajenos || []).forEach((a) => {
+    const s = porId.get(a.caballo_id);
+    if (!s) return;
+    const dias = diasDesde(a.fecha);
+    sumar(s, a.chukkers, dias);
+    s.deOtros += a.chukkers;
+    if (a.jinete && !s.jinetes.includes(a.jinete)) s.jinetes.push(a.jinete);
+    if (a.torneo) s.torneos += a.chukkers;
+    else s.practicas += a.chukkers;
+    s.jornadas++;
+    if (a.puntaje) s.puntajes.push(a.puntaje);
+    if (!s.ultimo || a.fecha > s.ultimo) s.ultimo = a.fecha;
+  });
 
   // Los chukkers de afuera pesan igual: son patas del caballo. No suman
   // jornada del club ni puntaje —nadie los vio— pero sí carga, que es
@@ -1650,6 +1669,14 @@ function panelEstadisticas(raiz) {
       el('span', { style: 'flex:1;min-width:0' }, [
         el('b', { style: s.caballo.lesionado ? 'color:var(--rojo)' : null }, [
           s.caballo.lesionado ? icono('cruz', 11, 'cruz-fila') : null,
+          // El punto dice que esos chukkers no los montaste vos: los jugó
+          // alguien del grupo. El caballo los jugó igual, pero no con vos.
+          !s.mios && s.deOtros
+            ? el('i', {
+              class: 'punto-ajeno',
+              title: 'No lo jugaste vos' + (s.jinetes.length ? ': ' + enTexto(s.jinetes) : ''),
+            })
+            : null,
           s.caballo.nombre,
         ].filter(Boolean)),
         caballos.deQuien === 'grupo' && (s.caballo.duenios || []).length
@@ -1663,6 +1690,15 @@ function panelEstadisticas(raiz) {
       }, [cuandoJugo(s)]),
     ])),
   ]));
+
+  // Qué quiere decir el punto, dicho una sola vez y solo cuando hay alguno.
+  const ajenos = ordenados.filter((s) => !s.mios && s.deOtros);
+  if (ajenos.length) {
+    raiz.appendChild(el('p', { class: 'pista' }, [
+      el('i', { class: 'punto-ajeno' }), 'Esos chukkers no los montaste vos: '
+      + 'los jugó alguien del grupo. Cuentan igual, porque son patas del caballo.',
+    ]));
+  }
 
   // El dato que el club hoy no tiene: qué caballo viene jugando de más.
   const cargados = stats.filter((s) => s.chukkers7 >= 6);
@@ -1950,17 +1986,18 @@ function planoDelCalendario(stats, medidas) {
   const extras = caballos.extras || [];
   const eventos = (jornadas.length || extras.length) ? diaPorDia(jornadas, extras) : [];
 
-  // Los chukkers de afuera, listos para buscar por caballo y día. Y con ellos
-  // lo que los del grupo cargaron: para el animal es el mismo día de trabajo.
+  /* Los chukkers de afuera, listos para buscar por caballo y día. Y aparte lo
+     que cargó otro del grupo: para el animal los dos son trabajo del día, pero
+     no son lo mismo y el punto negro del cuadrito marca solo los de afuera —
+     los que jugó en otro club—, no los que jugó acá con otro jinete. */
   const afuera = {};
-  const sumarAfuera = (id, fecha, cuanto) => {
+  const delGrupo = {};
+  const sumar = (donde, id, fecha, cuanto) => {
     const k = id + '|' + fecha;
-    afuera[k] = (afuera[k] || 0) + cuanto;
+    donde[k] = (donde[k] || 0) + cuanto;
   };
-  extras.forEach((e) => sumarAfuera(e.caballo_id, e.fecha, e.chukkers));
-  if (caballos.deQuien === 'grupo') {
-    (caballos.ajenos || []).forEach((a) => sumarAfuera(a.caballo_id, a.fecha, a.chukkers));
-  }
+  extras.forEach((e) => sumar(afuera, e.caballo_id, e.fecha, e.chukkers));
+  (caballos.ajenos || []).forEach((a) => sumar(delGrupo, a.caballo_id, a.fecha, a.chukkers));
 
   // Los que jugaron, y también los lesionados que no jugaron nada: que un
   // caballo esté parado es exactamente lo que este cuadro tiene que mostrar.
@@ -1980,9 +2017,10 @@ function planoDelCalendario(stats, medidas) {
     const celdas = eventos.map((ev) => {
       const mios = Object.keys(ev.uso).filter((l) => ids.includes(ev.uso[l]));
       const deAfuera = ids.reduce((a, id) => a + (afuera[id + '|' + ev.fecha] || 0), 0);
+      const deOtros = ids.reduce((a, id) => a + (delGrupo[id + '|' + ev.fecha] || 0), 0);
       return {
         fecha: ev.fecha,
-        chukkers: sumaDeLugares(mios) + deAfuera,
+        chukkers: sumaDeLugares(mios) + deAfuera + deOtros,
         puntaje: ids.map((id) => ev.puntajes[id]).find((p) => p) || null,
         // El torneo exige distinto que la práctica: el cuadrito lo dice con
         // una diagonal, y si el caballo hizo medio chukker se llena la mitad.
@@ -2102,7 +2140,7 @@ function grafico(raiz, stats) {
       + '<circle cx="7.5" cy="7.5" r="3.2" fill="' + HALO_AFUERA + '" opacity="0.92"/>'
       + '<circle cx="7.5" cy="7.5" r="2.5" fill="' + PUNTO_AFUERA + '"/>';
     raiz.appendChild(el('p', { class: 'ref-afuera' }, [
-      marca, el('span', {}, ['el punto marca los chukkers que jugó fuera del club']),
+      marca, el('span', {}, ['el punto negro marca los chukkers que jugó fuera del club']),
     ]));
   }
 
