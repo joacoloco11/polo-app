@@ -213,6 +213,15 @@
   .col-chico.aviso-carga { color: var(--gold); font-weight: 600; }
   .cabeza-tabla .col-chico { font-size: 9px; font-weight: 700; letter-spacing: 1.1px; color: var(--muted); }
   .cruz-fila { display: inline-block; vertical-align: -1px; margin-right: 3px; }
+  /* El punto de "esos chukkers no los montaste vos": los hizo alguien del
+     grupo. La carga del caballo es la misma; lo que cambia es quién lo vio. */
+  .punto-ajeno {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--gold); margin-right: 6px; vertical-align: 2px;
+  }
+  /* El asterisco no es un punto sino un signo, así que va como texto y no
+     como caja: una caja con medidas propias se le escapa del renglón. */
+  .marca-afuera { color: var(--gold); font-weight: 700; margin-right: 3px; }
   .quien b { display: block; font-family: var(--serif); font-size: 14.5px; font-weight: 600; }
   .quien > span > span { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
   .marca { font-size: 10px; letter-spacing: 1px; color: var(--gold); border: 1px solid rgba(160,119,34,.45); border-radius: 4px; padding: 3px 7px; white-space: nowrap; }
@@ -313,17 +322,99 @@
   .cabecera-hoja { margin-bottom: 14px; }
   .cabecera-hoja b { display: block; font-family: var(--serif); font-size: 19px; font-weight: 600; }
   .cabecera-hoja span { font-size: 12px; color: var(--muted); }
-  .equipos-tabla { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-  .equipo { border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; }
-  .equipo .renglon { display: flex; justify-content: space-between; gap: 8px; font-family: var(--serif); font-size: 13.5px; padding: 3px 0; }
-  .equipo .renglon.de-mas span { font-weight: 700; }
-  .equipo .renglon em { font-style: normal; font-size: 12px; color: var(--muted); }
-  .equipo .suma { font-size: 11px; color: var(--muted); margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
-  .bicolor-caja { margin-top: 12px; }
+  /* Un equipo por columna: dos, o tres en las de 12. Puestos al lado se leen
+     como en la planilla de papel, en vez de uno abajo del otro. */
+  .equipos-tabla { display: grid; gap: 9px; }
+  .equipos-tabla.dos { grid-template-columns: 1fr 1fr; }
+  .equipos-tabla.tres { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .equipo { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  /* El encabezado lleva el color del equipo y, a la derecha, su handicap: es
+     el número que se mira para saber si están parejos. */
+  .equipo .cab {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 4px;
+    padding: 7px 9px; font-size: 9.5px; font-weight: 700; letter-spacing: 1.1px;
+  }
+  .equipo.azul .cab { background: rgba(29,78,216,.10); color: var(--azul); }
+  .equipo.blanco .cab { background: rgba(71,85,105,.12); color: var(--blanco); }
+  .equipo.colorado .cab { background: rgba(185,28,28,.10); color: var(--colorado); }
+  .equipo.bicolor .cab { background: rgba(160,119,34,.10); color: var(--gold); }
+  .equipo .cab b { font-family: var(--serif); font-size: 14px; font-weight: 700; color: var(--ink); }
+  .equipo .cab b i { font-family: var(--sans); font-style: normal; font-size: 8.5px; color: var(--muted); margin-left: 2px; }
+  .equipo .renglon {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 5px;
+    padding: 7px 9px; border-top: 1px solid var(--linea-suave); font-size: 13px;
+  }
+  .equipo .renglon .nm { font-family: var(--serif); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .equipo .renglon.de-mas .nm { font-weight: 700; }
+  .equipo .renglon em { font-style: normal; font-size: 11px; color: var(--muted); margin-left: auto; }
+  .equipo .renglon .h { font-style: normal; font-size: 11.5px; color: var(--muted); flex-shrink: 0; margin-left: auto; }
+  .equipo .renglon em + .h { margin-left: 5px; }
+  /* El que entró a mano después del armado automático. */
+  .equipo .renglon.nuevo { background: rgba(0,137,122,.09); }
+  .equipo .renglon.nuevo .nm { color: var(--teal); }
+  /* Tres columnas en un celular son angostas: COLORADO con su handicap al lado
+     no entra. Se achica la letra, se aprieta el espaciado y el "hcp" chiquito
+     se va: arriba de un número que ya está en una caja de equipo, sobra. */
+  .equipos-tabla.tres .equipo .cab { padding: 6px 5px; font-size: 8.5px; letter-spacing: .5px; }
+  .equipos-tabla.tres .equipo .cab b { font-size: 13px; }
+  .equipos-tabla.tres .equipo .cab b i { display: none; }
+  .equipos-tabla.tres .equipo .renglon { padding: 6px 5px; font-size: 12px; }
+  .bicolor-caja { margin-top: 10px; border-color: rgba(160,119,34,.45); }
+  .bicolor-caja .al-pie { padding: 6px 9px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--linea-suave); }
   h3.color.azul { color: var(--azul); }
   h3.color.blanco { color: var(--blanco); }
   h3.color.colorado { color: var(--colorado); }
   h3.color.bicolor { color: var(--gold); }
+
+  /* --- anotación: quién juega el próximo día --- */
+  /* El cartel de "ya estás": el tilde verde se ve antes de leer nada. */
+  .anotado {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(0,137,122,.09); border: 1px solid var(--teal);
+    border-radius: 10px; padding: 12px 14px; color: var(--teal);
+  }
+  .anotado b { display: block; font-family: var(--serif); font-size: 15px; color: var(--ink); }
+  .anotado > div > span { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .anotado button.link { flex-shrink: 0; padding: 6px 2px; }
+  .quien.yo { background: rgba(0,137,122,.07); }
+  .marca.azul { color: var(--azul); border-color: rgba(29,78,216,.4); }
+  .marca.blanco { color: var(--blanco); border-color: rgba(71,85,105,.4); }
+  .marca.colorado { color: var(--colorado); border-color: rgba(185,28,28,.4); }
+  .marca.bicolor { color: var(--gold); border-color: rgba(160,119,34,.45); }
+  /* JUEGO: el botón de la semana. Es el único que se toca sin mirar. */
+  button.primary.grande { font-size: 17px; letter-spacing: 2px; padding: 17px; min-height: 58px; }
+
+  /* Dos botones que caben en un renglón, para no empujar la lista hacia abajo. */
+  .dos-botones { display: flex; gap: 8px; margin-top: 14px; }
+  .dos-botones button { font-size: 12.5px; padding: 11px 6px; gap: 6px; }
+
+  /* --- armar solo: los dos botones de dos renglones --- */
+  .dos-autos { display: flex; gap: 8px; }
+  .dos-autos button.auto {
+    flex: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+    padding: 10px 8px; text-align: center; line-height: 1.25; font: inherit;
+    color: var(--ink); cursor: pointer; min-height: 56px;
+  }
+  .dos-autos button.auto.puesto { border-color: var(--teal); background: rgba(0,137,122,.09); }
+  .dos-autos button.auto.esperando { opacity: .5; }
+  .dos-autos button.auto b { display: block; font-size: 12.5px; font-weight: 600; }
+  .dos-autos button.auto em { display: block; font-style: normal; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  /* El handicap de cada equipo mientras se cambia gente: se mueve en el toque. */
+  .marcador-hcp { display: flex; gap: 8px; margin: 12px 0; }
+  .marcador-hcp > div {
+    flex: 1; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 4px;
+  }
+  .marcador-hcp > div > span { font-size: 9.5px; font-weight: 700; letter-spacing: 1.1px; }
+  .marcador-hcp > div > b { font-family: var(--serif); font-size: 17px; color: var(--ink); }
+  .marcador-hcp > div > b i { font-family: var(--sans); font-style: normal; font-size: 8.5px; color: var(--muted); margin-left: 2px; }
+  .marcador-hcp .azul { border-color: rgba(29,78,216,.35); color: var(--azul); }
+  .marcador-hcp .blanco { border-color: rgba(71,85,105,.35); color: var(--blanco); }
+  .marcador-hcp .colorado { border-color: rgba(185,28,28,.35); color: var(--colorado); }
+  /* Va con `.quien.puesto` adelante para ganarle al color del equipo, que
+     también pinta el círculo: acá el círculo es el botón de sacar. */
+  .quien.puesto .orden.saca { background: var(--rojo); color: var(--sobre-color); font-size: 15px; }
+  h2 em { font-style: normal; color: var(--muted); font-size: 11px; font-weight: 400; letter-spacing: .4px; text-transform: none; margin-left: 6px; }
   .franjas { margin-top: 12px; font-size: 13px; color: var(--muted); }
   .franjas div { padding: 2px 0; }
   .nota-hoja {
@@ -348,6 +439,34 @@
   .sello.colorado { background: rgba(185,28,28,.10); color: var(--colorado); }
   .sello.bicolor { background: rgba(160,119,34,.10); color: var(--gold); }
   .sello.aap { background: rgba(147,51,234,.10); color: #c084fc; }
+
+  /* --- la caballada compartida --- */
+  /* El interruptor de arriba: mis caballos o los del grupo. */
+  .chips.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .chip.grande { padding: 9px 8px; line-height: 1.2; }
+  .chip.grande em { display: block; font-style: normal; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  /* El cartel de la invitación, arriba de todo: es lo primero que se contesta. */
+  .invita {
+    border: 1px solid var(--teal); background: rgba(0,137,122,.07);
+    border-radius: 11px; padding: 14px; margin-top: 14px;
+  }
+  .invita b { display: block; font-family: var(--serif); font-size: 16px; font-weight: 600; margin-bottom: 5px; }
+  .invita p { font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
+  .invita .dos-botones { margin-top: 0; }
+  .invita .primary { padding: 12px; font-size: 14px; min-height: 44px; }
+  /* El tilde de quién está en el grupo, y de a quién estás invitando. */
+  .casilla {
+    width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--line);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff;
+  }
+  .casilla.puesta { background: var(--teal); border-color: var(--teal); }
+  .casilla.esperando { border-color: var(--gold); border-style: dashed; }
+  .falso-campo {
+    width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+    padding: 12px 14px; font-size: 15px; color: var(--ink);
+  }
+  /* De quién es el caballo, abajo del nombre. */
+  .cab-head b u { display: block; text-decoration: none; font-family: var(--sans); font-size: 10.5px; color: var(--muted); font-weight: 400; margin-top: 1px; }
 
   .caballo { background: var(--ground); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
   .caballo.usado { border-color: var(--teal); }
@@ -388,8 +507,18 @@
   /* --- los chukkers jugados fuera del club --- */
   /* La casilla no es un lugar más de la práctica: va al final, más ancha, con
      la palabra, y separada de las seis por una raya. */
-  .chuk.extra { width: auto; padding: 0 13px; font-size: 12px; letter-spacing: .4px; }
+  .chuk.extra, .chuk.ancho { width: auto; padding: 0 13px; font-size: 12px; letter-spacing: .4px; }
   .chuk.extra[data-estado="cargado"] { border-color: var(--teal); color: var(--teal); font-weight: 600; }
+  /* El botón que parte los chukkers al medio para un caballo. Prendido no se
+     pinta entero como una casilla puesta: no es un lugar, es un modo. */
+  .chuk.ancho[data-estado="mio"] {
+    background: rgba(0,137,122,.09); border-color: var(--teal); color: var(--teal); font-weight: 700;
+  }
+  /* Un chukker que ya tiene medio tomado por otro caballo: se pinta la mitad
+     para que se vea que está ocupado, sin mentir que lo está entero. */
+  .chuk.a-medias {
+    background: linear-gradient(to right, rgba(107,120,145,.28) 0 50%, transparent 50% 100%);
+  }
   .sep-chuk { width: 1px; height: 26px; background: var(--line); margin: 0 3px; align-self: center; }
   .extra-panel { background: var(--surface); border-radius: 10px; padding: 12px 12px 4px; margin-top: 10px; }
   .extra-panel .acciones { margin-top: 4px; }
@@ -797,13 +926,14 @@
      el que tenía guardado. Cambia con cada versión que se publica, junto con
      `lib/version.js`. Sin esto, uno sube los archivos y sigue viendo la app
      vieja hasta que se le ocurre limpiar el navegador. -->
-<script src="logo.js?v=2026.09.18"></script>
-<script src="hoja.js?v=2026.09.18"></script>
-<script src="comun.js?v=2026.09.18"></script>
-<script src="caballos.js?v=2026.09.18"></script>
-<script src="usocanchas.js?v=2026.09.18"></script>
-<script src="ranking.js?v=2026.09.18"></script>
-<script src="armar.js?v=2026.09.18"></script>
+<script src="logo.js?v=2026.09.23"></script>
+<script src="hoja.js?v=2026.09.23"></script>
+<script src="comun.js?v=2026.09.23"></script>
+<script src="caballos.js?v=2026.09.23"></script>
+<script src="usocanchas.js?v=2026.09.23"></script>
+<script src="ranking.js?v=2026.09.23"></script>
+<script src="anotacion.js?v=2026.09.23"></script>
+<script src="armar.js?v=2026.09.23"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */
 
@@ -910,6 +1040,9 @@ function pantallaPin(errorTexto) {
         body: JSON.stringify({ jugadorId: quien.id, pin: pin.value }),
       });
       const sesion = await pedir('/api/sesion').catch(() => ({ jugador: r.jugador }));
+      // Recién acá se sabe qué trae esta copia —la franja y si Anotación está
+      // prendida—: la pantalla de entrada no tiene sesión para preguntarlo.
+      marcarAmbiente(sesion);
       if (sesion.jugador && sesion.jugador.faltaNacimiento) {
         pantallaNacimiento(sesion);
         return;
@@ -977,6 +1110,11 @@ function marcarAmbiente(respuesta) {
   if (respuesta && respuesta.ambiente === 'prueba') {
     document.getElementById('franja-prueba').hidden = false;
     document.title = 'PRUEBA · San Diego Polo';
+  }
+  // Y si esta copia tiene prendida la solapa Anotación. Lo dice el servidor
+  // porque depende de una variable de Vercel, no del código.
+  if (respuesta && respuesta.conAnotacion !== undefined) {
+    estado.conAnotacion = !!respuesta.conAnotacion;
   }
 }
 

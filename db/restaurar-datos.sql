@@ -9,9 +9,8 @@
 --    1. Abrí el archivo del respaldo (el que bajaste con
 --       `respaldo-de-datos.sql`) con el Bloc de notas o TextEdit.
 --       Con Word no: cambia las comillas y no funciona.
---    2. Copiá TODO lo que hay adentro, desde la primera llave `{` hasta la
---       última `}`. Si el archivo es un CSV y arriba de todo dice "respaldo"
---       en un renglón solo, ese renglón NO va: empezá desde la llave.
+--    2. Seleccioná TODO (Ctrl+A) y copiá (Ctrl+C). Tal cual está: no hace
+--       falta borrarle nada ni limpiarlo.
 --    3. En este archivo, más abajo, donde dice PEGAR EL RESPALDO ACÁ,
 --       borrá esa línea y pegá lo que copiaste. Queda entre las dos marcas
 --       $json$ — no las toques, son las que aguantan las comillas de adentro.
@@ -27,9 +26,33 @@ begin;
 
 create temporary table _respaldo (j jsonb) on commit drop;
 
-insert into _respaldo (j) values ($json$
-PEGAR EL RESPALDO ACÁ (borrá este renglón y pegá desde la llave { hasta la } )
-$json$::jsonb);
+-- ---------------------------------------------------------------------------
+--  El respaldo entra tal cual salga del archivo. Limpiarlo a mano es lo que
+--  hace esta parte, y no es un lujo:
+--
+--  el botón de descargar de Supabase saca un CSV, y un CSV guarda el texto
+--  entre comillas y DUPLICA cada comilla de adentro. Entonces el archivo no
+--  empieza en `{"id":` sino en `"{""id"":`, que como JSON no es nada, y
+--  Postgres corta con
+--      invalid input syntax for type json ... Token "id" is invalid.
+--
+--  Se detecta solo: si el texto arranca con una comilla antes de la llave es
+--  un CSV y hay que desarmarlo; si arranca con la llave, ya venía limpio y no
+--  se toca. Y el renglón que dice `respaldo` arriba de todo —el encabezado de
+--  la columna— se descarta, así que tampoco hay que acordarse de borrarlo.
+-- ---------------------------------------------------------------------------
+insert into _respaldo (j)
+select case when texto like '"%'
+            then replace(btrim(texto, '"'), '""', '"')
+            else texto
+       end::jsonb
+from (
+  -- El segundo argumento de btrim no sobra: sin él saca espacios y NADA MÁS
+  -- —ni saltos de línea—, y entonces la comilla del final queda adentro.
+  select btrim(regexp_replace($json$
+PEGAR EL RESPALDO ACÁ (borrá este renglón y pegá todo lo que copiaste)
+$json$, '^\s*respaldo\s*[\r\n]+', ''), E' \t\r\n') as texto
+) as crudo;
 
 -- El orden no es capricho: cada tabla necesita que ya estén las de arriba.
 insert into temporada

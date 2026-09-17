@@ -37,6 +37,15 @@ const armado = {
   cabecera: null,      // la cabecera con la que se armó esa planilla
   guardada: null,      // la práctica ya publicada
   error: null,
+  /* --- de dónde salen los que se pueden elegir ---------------------------
+     Desde que existe Anotación, la lista de arriba son los anotados de ese
+     día en orden de llegada. El plantel entero queda a un toque, para el día
+     que haya que armar algo sin lista. */
+  desde: 'anotados',   // 'anotados' | 'plantel'
+  orden: 'llegada',    // cómo se ordenan los anotados: 'llegada' | 'handicap'
+  auto: null,          // qué botón automático propuso lo que se ve
+  cambiados: [],       // a quiénes metiste a mano después del automático
+  cambiando: false,    // está abierta la pantalla de cambiar jugadores
 };
 
 const coloresDe = (cantidad) => Object.keys(CUPOS[cantidad]);
@@ -54,20 +63,101 @@ function colorConLugar() {
   return null;
 }
 
-function alternar(id) {
+function alternar(id, aMano) {
   const ya = elegido(id);
   if (ya) {
     armado.elegidos = armado.elegidos.filter((e) => e.id !== id);
+    armado.cambiados = armado.cambiados.filter((x) => x !== id);
   } else {
     const color = colorConLugar();
     if (!color) return;
     armado.elegidos.push({ id, color });
+    // El que entra se queda con el color del que salió —es el único que tenía
+    // lugar— y queda marcado, para que en la propuesta se vea qué tocaste.
+    if (aMano && !armado.cambiados.includes(id)) armado.cambiados.push(id);
   }
   armado.planilla = null;
   armado.guardada = null;
+  armado.auto = null;
   const siguiente = colorConLugar();
   if (siguiente) armado.colorActivo = siguiente;
   render();
+}
+
+/* --------------------------------------------- quiénes se pueden elegir */
+
+/** ¿La lista de anotados es de este día y tiene gente? */
+const hayAnotados = () => !!(estado.conAnotacion
+  && anotacion.datos && anotacion.datos.convocatoria
+  && anotacion.datos.convocatoria.fecha === armado.fecha
+  && anotacion.datos.anotados.length);
+
+/**
+ * Los que ya tienen práctica ese día. De una lista de veinte salen dos
+ * prácticas, y la segunda no puede volver a elegir a los de la primera.
+ */
+function yaEnUnaPractica(fecha) {
+  const ids = new Set();
+  (practicas.lista || []).filter((p) => p.fecha === fecha).forEach((p) => {
+    Object.keys(p.equipos || {}).forEach((color) => {
+      p.equipos[color].forEach((j) => ids.add(j.id));
+    });
+  });
+  return ids;
+}
+
+/**
+ * Si hay una lista abierta, Armar arranca en ese día y a esa hora. Solo con el
+ * armado en blanco: si ya había algo empezado, no se le toca nada.
+ */
+function copiarElDiaDeLaLista() {
+  // La lista cerrada también cuenta: cerrarla es justo lo que se hace antes
+  // de venir a armar.
+  const c = anotacion.datos && anotacion.datos.convocatoria;
+  if (!c) return;
+  if (armado.elegidos.length || armado.planilla) return;
+  armado.fecha = c.fecha;
+  armado.hora = c.hora;
+}
+
+/** El handicap con el que se arman los equipos. Lo tiene el plantel cargado. */
+function hcpDe(id) {
+  const j = estado.plantel.find((x) => x.id === id);
+  return j ? Number(j.hcp_efectivo) || 0 : 0;
+}
+
+/**
+ * De quiénes se puede elegir, en el orden en que se van a ver. Los anotados
+ * vienen del servidor ya en orden de llegada; ese orden es el que manda y por
+ * eso se guarda aparte, aunque la lista se esté mirando por handicap.
+ */
+function disponibles() {
+  const ya = yaEnUnaPractica(armado.fecha);
+
+  if (armado.desde === 'anotados' && hayAnotados()) {
+    const lista = anotacion.datos.anotados.map((a, i) => ({
+      id: a.jugadorId,
+      apodo: a.apodo,
+      nombre: a.nombre || a.apodo,
+      handicap: a.handicap,
+      cuando: a.cuando,
+      llegada: i + 1,
+      aMano: a.aMano,
+    })).filter((j) => !ya.has(j.id) || elegido(j.id));
+
+    if (armado.orden === 'handicap') {
+      // Empatados en handicap, primero el que se anotó antes: el reloj
+      // desempata, igual que en el armado automático del servidor.
+      lista.sort((a, b) => b.handicap - a.handicap || a.llegada - b.llegada);
+    }
+    return lista;
+  }
+
+  return estado.plantel
+    .filter((j) => j.activo && (!ya.has(j.id) || elegido(j.id)))
+    .map((j) => ({
+      id: j.id, apodo: j.apodo, nombre: j.nombre, handicap: Number(j.hcp_efectivo) || 0,
+    }));
 }
 
 /** Al cambiar de formato hay que soltar lo que ya no entra en los cupos. */
@@ -83,6 +173,8 @@ function acomodarAlFormato() {
   armado.colorActivo = colorConLugar() || coloresDe(armado.cantidad)[0];
   armado.planilla = null;
   armado.guardada = null;
+  armado.auto = null;
+  armado.cambiados = [];
 }
 
 const cabeceraActual = () => ({
@@ -91,14 +183,17 @@ const cabeceraActual = () => ({
 
 /* --------------------------------------------------------------- servidor */
 
-async function pedirPlanilla({ balancear, guardar }) {
+async function pedirPlanilla({ balancear, guardar, auto }) {
   armado.error = null;
   const cuerpo = {
     ...cabeceraActual(),
     formato: armado.cantidad,
     guardar: !!guardar,
   };
-  if (balancear) cuerpo.seleccion = armado.elegidos.map((e) => e.id);
+  // `auto` no manda jugadores: los elige el servidor de entre los anotados de
+  // ese día, que es el único lugar donde esa lista es la verdadera.
+  if (auto) cuerpo.auto = auto;
+  else if (balancear) cuerpo.seleccion = armado.elegidos.map((e) => e.id);
   else cuerpo.jugadores = armado.elegidos.map((e) => ({ id: e.id, color: e.color }));
 
   const r = await pedir('/api/practicas', { method: 'POST', body: JSON.stringify(cuerpo) });
@@ -111,9 +206,25 @@ async function pedirPlanilla({ balancear, guardar }) {
     const porId = new Map(r.planilla.jugadores.map((j) => [j.id, j.color]));
     armado.elegidos = armado.elegidos.map((e) => ({ ...e, color: porId.get(e.id) || e.color }));
   }
+  // Si eligió el servidor, la propuesta pasa a ser la selección de la pantalla:
+  // así se la puede retocar antes de publicar sin perder nada.
+  if (auto) {
+    armado.elegidos = r.planilla.jugadores.map((j) => ({ id: j.id, color: j.color }));
+    armado.colorActivo = coloresDe(armado.cantidad)[0];
+  }
   // La imagen se prepara ya, para que compartir salga en un solo toque.
   Hoja.preparar(r.planilla, armado.cabecera).catch(() => {});
   return r;
+}
+
+/**
+ * Los dos automáticos. El que elige es el servidor —ahí vive el motor— y acá
+ * solo se dice cuál de los dos y con cuántos.
+ */
+async function armadoAutomatico(modo) {
+  armado.cambiados = [];
+  await pedirPlanilla({ auto: modo, guardar: false });
+  armado.auto = modo;
 }
 
 /**
@@ -132,6 +243,24 @@ async function conBoton(boton, trabajo, donde = armado) {
   }
   boton.disabled = false;
   boton.textContent = original;
+  render();
+}
+
+/**
+ * Lo mismo, pero sin tocar el contenido del botón: los que tienen dos
+ * renglones adentro perderían el de abajo si se les cambia el texto.
+ */
+async function conEspera(boton, trabajo, donde = armado) {
+  boton.disabled = true;
+  boton.classList.add('esperando');
+  try {
+    donde.error = null;
+    await trabajo();
+  } catch (e) {
+    donde.error = e.message;
+  }
+  boton.disabled = false;
+  boton.classList.remove('esperando');
   render();
 }
 
@@ -174,6 +303,10 @@ function vistaArmar(raiz) {
     }, [armado.notas])),
   ]));
 
+  /* ---- los dos automáticos */
+
+  if (hayAnotados()) raiz.appendChild(panelAutomatico());
+
   /* ---- equipos */
 
   const colores = coloresDe(armado.cantidad);
@@ -195,61 +328,153 @@ function vistaArmar(raiz) {
       : 'Están los ' + armado.cantidad + '. El primero de cada equipo es el que juega de más.',
   ]));
 
-  /* ---- plantel: treinta y cinco nombres, con buscador y por handicap */
+  /* ---- de quiénes elegir: los anotados de ese día, o el plantel entero */
 
-  const activos = estado.plantel.filter((j) => j.activo);
+  raiz.appendChild(cabezaDeLaLista());
 
-  if (!activos.length) {
-    raiz.appendChild(el('div', { class: 'vacio' }, ['No hay nadie en el plantel todavía.']));
+  const gente = disponibles();
+  if (!gente.length) {
+    raiz.appendChild(el('div', { class: 'vacio' }, [
+      armado.desde === 'anotados' && hayAnotados()
+        ? 'Los anotados ya están todos en una práctica de este día.'
+        : 'No hay nadie en el plantel todavía.',
+    ]));
     return dibujarBotones(raiz);
   }
 
   const buscador = el('input', {
-    type: 'text', placeholder: 'Buscar en el plantel…', value: armado.filtro || '',
-    'aria-label': 'Buscar en el plantel',
-    oninput: (e) => { armado.filtro = e.target.value; dibujarPlantel(); },
+    type: 'text', placeholder: 'Buscar…', value: armado.filtro || '',
+    'aria-label': 'Buscar un jugador',
+    oninput: (e) => { armado.filtro = e.target.value; dibujarLaLista(); },
   });
   raiz.appendChild(el('div', { style: 'margin-top:10px' }, [buscador]));
 
   const caja = el('div', { class: 'lista tabla', style: 'margin-top:8px' });
   raiz.appendChild(caja);
 
-  function dibujarPlantel() {
+  function dibujarLaLista() {
     vaciar(caja);
     const texto = (armado.filtro || '').trim().toLowerCase();
-    const visibles = activos.filter((j) => !texto
+    const visibles = gente.filter((j) => !texto
       || j.apodo.toLowerCase().includes(texto)
-      || j.nombre.toLowerCase().includes(texto));
+      || String(j.nombre || '').toLowerCase().includes(texto));
 
     if (!visibles.length) {
       caja.appendChild(el('div', { class: 'vacio' }, ['No hay nadie que coincida.']));
       return;
     }
 
-    // Agrupados por handicap: es como el club piensa un equipo.
+    // Con los anotados la lista va de corrido: el orden ya dice algo —cómo
+    // llegaron, o cómo pegan— y cortarla en bandas lo taparía. Con el plantel
+    // entero sí, agrupado por handicap, que es como el club piensa un equipo.
+    const porBandas = armado.desde !== 'anotados' || !hayAnotados();
     let ultimo = null;
+
     visibles.forEach((j) => {
-      if (j.hcp_interno !== ultimo) {
-        ultimo = j.hcp_interno;
-        caja.appendChild(el('div', { class: 'banda' }, ['Handicap ' + hcp(j.hcp_interno)]));
+      if (porBandas && j.handicap !== ultimo) {
+        ultimo = j.handicap;
+        caja.appendChild(el('div', { class: 'banda' }, ['Handicap ' + hcp(j.handicap)]));
       }
-      const marca = elegido(j.id);
-      const posicion = marca ? armado.elegidos.indexOf(marca) + 1 : null;
-      caja.appendChild(el('button', {
-        type: 'button', class: 'quien compacto' + (marca ? ' puesto ' + marca.color : ''),
-        onclick: () => alternar(j.id),
-      }, [
-        el('span', { class: 'orden' }, [marca ? String(posicion) : '+']),
-        el('span', { style: 'flex:1;min-width:0' }, [
-          el('b', {}, [j.apodo]),
-        ]),
-        el('span', { class: 'hcp' }, [hcp(j.hcp_interno)]),
-      ]));
+      caja.appendChild(renglonElegible(j));
     });
   }
-  dibujarPlantel();
+  dibujarLaLista();
 
   dibujarBotones(raiz);
+}
+
+/** Un jugador de la lista de arriba: se toca y entra o sale del armado. */
+function renglonElegible(j) {
+  const marca = elegido(j.id);
+  const posicion = marca ? armado.elegidos.indexOf(marca) + 1 : null;
+  return el('button', {
+    type: 'button', class: 'quien compacto' + (marca ? ' puesto ' + marca.color : ''),
+    onclick: () => alternar(j.id),
+  }, [
+    el('span', { class: 'orden' }, [marca ? String(posicion) : '+']),
+    el('span', { style: 'flex:1;min-width:0' }, [el('b', {}, [j.apodo])]),
+    // El puesto de llegada solo cuando la lista está ordenada por handicap:
+    // mirándola por llegada ya lo dice el renglón de arriba.
+    j.llegada && armado.orden === 'handicap'
+      ? el('span', { class: 'col-chico ancha' }, [String(j.llegada) + 'º'])
+      : null,
+    j.cuando ? el('span', { class: 'col-chico ancha' }, [cuandoSeAnoto(j.cuando)]) : null,
+    el('span', { class: 'hcp' }, [hcp(j.handicap)]),
+  ].filter(Boolean));
+}
+
+/**
+ * El encabezado de la lista: cuántos hay, de dónde salen y en qué orden.
+ * El orden no es decorativo —el de llegada es el que decide quién queda
+ * afuera cuando sobra gente— así que se elige a la vista.
+ */
+function cabezaDeLaLista() {
+  const caja = el('div');
+  // Sin la solapa Anotación prendida no hay dos listas entre las que elegir:
+  // la de siempre es el plantel, y no hace falta decirlo.
+  if (!estado.conAnotacion) return caja;
+
+  const conAnotados = hayAnotados();
+  const cuantos = disponibles().length;
+
+  caja.appendChild(el('h2', {}, [
+    armado.desde === 'anotados' && conAnotados
+      ? 'Anotados · ' + cuantos
+      : 'Plantel · ' + cuantos,
+  ]));
+
+  if (!conAnotados) {
+    caja.appendChild(el('p', { class: 'pista', style: 'margin-top:0' }, [
+      anotacion.datos && anotacion.datos.convocatoria
+        ? 'La lista de anotados es del ' + Hoja.fechaCorta(anotacion.datos.convocatoria.fecha)
+          + ', no de este día: elegís del plantel.'
+        : 'No hay lista de anotados para este día: elegís del plantel.',
+    ]));
+    return caja;
+  }
+
+  if (armado.desde === 'anotados') {
+    caja.appendChild(el('div', { class: 'chips', style: 'margin-bottom:8px' }, [
+      ['llegada', 'Orden de llegada'], ['handicap', 'Por handicap'],
+    ].map(([id, texto]) => el('button', {
+      type: 'button', class: 'chip', 'aria-pressed': armado.orden === id,
+      onclick: () => { armado.orden = id; render(); },
+    }, [texto]))));
+  }
+
+  caja.appendChild(el('button', {
+    class: 'link', type: 'button',
+    onclick: () => {
+      armado.desde = armado.desde === 'anotados' ? 'plantel' : 'anotados';
+      armado.filtro = '';
+      render();
+    },
+  }, [armado.desde === 'anotados' ? 'Ver el plantel entero' : 'Volver a los anotados']));
+
+  return caja;
+}
+
+/** Los dos botones que arman solos, una vez decidido de cuántos es. */
+function panelAutomatico() {
+  const boton = (modo, encabeza, pie) => el('button', {
+    type: 'button', class: 'auto' + (armado.auto === modo ? ' puesto' : ''),
+    // `currentTarget` y no `target`: el toque cae en el `<b>` de adentro.
+    onclick: (e) => conEspera(e.currentTarget, () => armadoAutomatico(modo)),
+  }, [
+    el('b', {}, [encabeza]),
+    el('em', {}, [pie]),
+  ]);
+
+  return el('div', {}, [
+    el('h2', {}, ['Armar solo']),
+    el('div', { class: 'dos-autos' }, [
+      boton('nivel', 'Armado por nivel', 'los ' + armado.cantidad + ' de más handicap'),
+      boton('parejo', 'Armado parejo', 'los que dejan los equipos más parejos'),
+    ]),
+    el('p', { class: 'pista' }, [
+      'Eligen de entre los anotados y reparten los equipos. Después lo podés tocar.',
+    ]),
+  ]);
 }
 
 function dibujarBotones(raiz) {
@@ -268,7 +493,14 @@ function dibujarBotones(raiz) {
     armado.elegidos.length
       ? el('button', {
         class: 'link', type: 'button',
-        onclick: () => { armado.elegidos = []; armado.planilla = null; armado.guardada = null; render(); },
+        onclick: () => {
+          armado.elegidos = [];
+          armado.planilla = null;
+          armado.guardada = null;
+          armado.cambiados = [];
+          armado.auto = null;
+          render();
+        },
       }, ['Empezar de nuevo'])
       : null,
   ]));
@@ -277,14 +509,131 @@ function dibujarBotones(raiz) {
 
   if (armado.planilla) {
     raiz.appendChild(el('h2', {}, [armado.guardada ? 'Publicada' : 'Así queda']));
-    raiz.appendChild(panelPlanilla(armado.planilla, armado.cabecera, !armado.guardada, !!armado.guardada));
+    if (!armado.guardada && armado.cambiados.length) {
+      raiz.appendChild(aviso('ok', armado.cambiados.length === 1
+        ? 'Cambiaste un jugador de la propuesta. Va marcado abajo.'
+        : 'Cambiaste ' + armado.cambiados.length + ' jugadores de la propuesta.'));
+    }
+    raiz.appendChild(panelPlanilla(
+      armado.planilla, armado.cabecera, !armado.guardada, !!armado.guardada,
+      armado.guardada ? [] : armado.cambiados,
+      // Cambiar va arriba de publicar: es el paso de antes, no el de después.
+      !armado.guardada && hayAnotados()
+        ? el('button', {
+          class: 'ghost', type: 'button',
+          onclick: () => { armado.cambiando = true; armado.filtro = ''; render(); },
+        }, ['Cambiar jugadores'])
+        : null,
+    ));
   }
+}
+
+/* ------------------------------------------------- cambiar jugadores */
+
+/**
+ * Sacar a uno y meter a otro, con las dos listas a la vista: los que juegan y
+ * los anotados que quedaron afuera. El que entra se queda con el color del que
+ * salió —es el único lugar que queda libre— así que la propuesta no se
+ * desarma: solo cambia un nombre.
+ */
+function vistaCambiar(raiz) {
+  raiz.appendChild(el('button', {
+    class: 'link', type: 'button',
+    onclick: () => { armado.cambiando = false; armado.filtro = ''; render(); },
+  }, ['‹ Volver al armado']));
+
+  raiz.appendChild(titulo('Cambiar jugadores'));
+  raiz.appendChild(el('p', { class: 'pista', style: 'margin-top:0' }, [
+    'Sacá con − y metés con +. El que entra se queda con el color del que salió.',
+  ]));
+
+  raiz.appendChild(marcadorDeEquipos());
+
+  const gente = disponibles();
+  const adentro = armado.elegidos
+    .map((e) => ({ ...gente.find((j) => j.id === e.id), color: e.color }))
+    .filter((j) => j.id);
+  const afuera = gente.filter((j) => !elegido(j.id));
+
+  raiz.appendChild(el('h2', {}, [
+    'Juegan', el('em', {}, [armado.elegidos.length + ' de ' + armado.cantidad]),
+  ]));
+  raiz.appendChild(el('div', { class: 'lista tabla' }, adentro.map((j) =>
+    el('button', {
+      type: 'button', class: 'quien compacto puesto ' + j.color,
+      onclick: () => alternar(j.id, true),
+    }, [
+      el('span', { class: 'orden saca' }, ['−']),
+      el('span', { style: 'flex:1;min-width:0' }, [el('b', {}, [j.apodo])]),
+      el('span', { class: 'marca ' + j.color }, [Hoja.LABEL[j.color].slice(0, 4)]),
+      el('span', { class: 'hcp' }, [hcp(j.handicap)]),
+    ]))));
+
+  raiz.appendChild(el('h2', {}, [
+    'Anotados sin entrar', el('em', {}, [String(afuera.length)]),
+  ]));
+
+  if (!afuera.length) {
+    raiz.appendChild(el('div', { class: 'vacio' }, ['Están todos adentro.']));
+  } else {
+    raiz.appendChild(el('div', { class: 'lista tabla' }, afuera.map((j) =>
+      el('button', {
+        type: 'button', class: 'quien compacto',
+        disabled: armado.elegidos.length >= armado.cantidad,
+        onclick: () => alternar(j.id, true),
+      }, [
+        el('span', { class: 'orden' }, ['+']),
+        el('span', { style: 'flex:1;min-width:0' }, [el('b', {}, [j.apodo])]),
+        j.cuando ? el('span', { class: 'col-chico ancha' }, [cuandoSeAnoto(j.cuando)]) : null,
+        el('span', { class: 'hcp' }, [hcp(j.handicap)]),
+      ].filter(Boolean)))));
+    raiz.appendChild(el('p', { class: 'pista' }, [
+      armado.elegidos.length >= armado.cantidad
+        ? 'Están los ' + armado.cantidad + ': primero sacá a alguien con −.'
+        : 'Siguen en orden de llegada, con la hora en que se anotaron.',
+    ]));
+  }
+
+  if (armado.error) raiz.appendChild(aviso('mal', armado.error));
+
+  raiz.appendChild(el('div', { class: 'acciones' }, [
+    el('button', {
+      class: 'primary', type: 'button',
+      disabled: armado.elegidos.length !== armado.cantidad,
+      onclick: (e) => conBoton(e.target, async () => {
+        await pedirPlanilla({ balancear: false, guardar: false });
+        armado.cambiando = false;
+      }),
+    }, ['Ver cómo queda']),
+  ]));
+}
+
+/**
+ * El handicap de cada equipo mientras se cambia gente. Se calcula acá y no en
+ * el servidor a propósito: tiene que moverse en el mismo toque, y el número
+ * sale del plantel, que ya está cargado.
+ */
+function marcadorDeEquipos() {
+  const colores = coloresDe(armado.cantidad);
+  const suma = (color) => armado.elegidos
+    .filter((e) => e.color === color)
+    .reduce((a, e) => a + hcpDe(e.id), 0);
+  const bicolor = colores.includes('bicolor') ? suma('bicolor') : 0;
+
+  return el('div', { class: 'marcador-hcp' }, colores
+    .filter((c) => c !== 'bicolor')
+    .map((color) => el('div', { class: 'color ' + color }, [
+      el('span', {}, [Hoja.LABEL[color]]),
+      // El bicolor juega para los dos, así que suma en los dos.
+      el('b', {}, [String(suma(color) + (color === 'colorado' ? 0 : bicolor)), el('i', {}, ['hcp'])]),
+    ])));
 }
 
 /* ----------------------------------------------------------- la planilla */
 
-function panelPlanilla(planilla, cabecera, sinPublicar, recienGuardada) {
+function panelPlanilla(planilla, cabecera, sinPublicar, recienGuardada, nuevos, antesDePublicar) {
   const caja = el('div', { class: 'card p' });
+  const cambiados = nuevos || [];
 
   caja.appendChild(el('div', { class: 'cabecera-hoja' }, [
     el('b', {}, [Hoja.fechaCorta(cabecera.fecha)]),
@@ -292,27 +641,38 @@ function panelPlanilla(planilla, cabecera, sinPublicar, recienGuardada) {
       + planilla.chukkers + ' chukkers']),
   ]));
 
-  const columnas = el('div', { class: 'equipos-tabla' });
+  /* Un equipo por columna: dos, o tres en las de 12. Puestos al lado se leen
+     como en la planilla de papel, en vez de uno abajo del otro. */
+  const renglonDe = (j) => el('div', {
+    class: 'renglon' + (j.todos ? ' de-mas' : '') + (cambiados.includes(j.id) ? ' nuevo' : ''),
+  }, [
+    el('span', { class: 'nm' }, [j.apodo]),
+    j.nota ? el('em', {}, [j.nota]) : null,
+    planilla.hcpConocido ? el('i', { class: 'h' }, [hcp(j.handicap)]) : null,
+  ].filter(Boolean));
+
+  const columnas = el('div', {
+    class: 'equipos-tabla ' + (planilla.equipos.length > 2 ? 'tres' : 'dos'),
+  });
   planilla.equipos.forEach((color) => {
-    columnas.appendChild(el('div', { class: 'equipo' }, [
-      el('h3', { class: 'color ' + color }, [Hoja.LABEL[color]]),
-      ...planilla.jugadores.filter((j) => j.color === color).map((j) =>
-        el('div', { class: 'renglon' + (j.todos ? ' de-mas' : '') }, [
-          el('span', {}, [j.apodo]),
-          j.nota ? el('em', {}, [j.nota]) : null,
-        ])),
-      planilla.hcpConocido
-        ? el('div', { class: 'suma' }, ['HCP ' + planilla.hcpPorEquipo[color]])
-        : null,
+    columnas.appendChild(el('div', { class: 'equipo ' + color }, [
+      el('div', { class: 'cab' }, [
+        el('span', {}, [Hoja.LABEL[color]]),
+        planilla.hcpConocido
+          ? el('b', {}, [String(planilla.hcpPorEquipo[color]), el('i', {}, ['hcp'])])
+          : null,
+      ].filter(Boolean)),
+      ...planilla.jugadores.filter((j) => j.color === color).map(renglonDe),
     ]));
   });
   caja.appendChild(columnas);
 
   const bicolor = planilla.jugadores.find((j) => j.color === 'bicolor');
   if (bicolor) {
-    caja.appendChild(el('div', { class: 'equipo bicolor-caja' }, [
-      el('h3', { class: 'color bicolor' }, ['BICOLOR']),
-      el('div', { class: 'renglon' }, [el('span', {}, [bicolor.apodo]), el('em', {}, [bicolor.nota])]),
+    caja.appendChild(el('div', { class: 'equipo bicolor bicolor-caja' }, [
+      el('div', { class: 'cab' }, [el('span', {}, ['BICOLOR'])]),
+      renglonDe(bicolor),
+      el('div', { class: 'al-pie' }, ['Juega para los dos equipos. Suma en los dos handicaps.']),
     ]));
   }
 
@@ -332,6 +692,7 @@ function panelPlanilla(planilla, cabecera, sinPublicar, recienGuardada) {
   }
 
   const acciones = el('div', { class: 'acciones' });
+  if (antesDePublicar) acciones.appendChild(antesDePublicar);
   if (sinPublicar) {
     acciones.appendChild(el('button', {
       class: 'primary', type: 'button',
@@ -339,6 +700,8 @@ function panelPlanilla(planilla, cabecera, sinPublicar, recienGuardada) {
         await pedirPlanilla({ balancear: false, guardar: true });
         armado.elegidos = [];   // lista para cargar la próxima
         armado.colorActivo = coloresDe(armado.cantidad)[0];
+        armado.cambiados = [];
+        armado.auto = null;
         practicas.lista = null;
         cargarPracticas();      // para que aparezca en la otra pestaña
       }),
@@ -1004,18 +1367,34 @@ function formularioDeCorreccion(j) {
 /* El orden es el que pidió el club: primero lo que se mira todos los días
    —el ranking y la ficha propia—, después los caballos, y las herramientas de
    organizar al final. */
+/* Anotación va primera —es lo que se toca durante la semana, todos los días— y
+   solo si está prendida en esta copia: mientras el club no la use, la solapa no
+   está y Armar elige del plantel como siempre. */
 const PESTANAS_ADMIN = [
+  ['anotacion', 'Anotación'],
   ['ranking', 'Ranking'], ['jugador', 'Jugador'], ['caballos', 'Caballos'],
   ['practicas', 'Prácticas'], ['armar', 'Armar'], ['plantel', 'Plantel'],
   ['canchas', 'Canchas'],
 ];
 const PESTANAS_JUGADOR = [
+  ['anotacion', 'Anotación'],
   ['ranking', 'Ranking'], ['jugador', 'Jugador'], ['caballos', 'Caballos'],
   ['practicas', 'Prácticas'],
 ];
 
+const lasPestanas = () => (estado.jugador.admin ? PESTANAS_ADMIN : PESTANAS_JUGADOR)
+  .filter(([id]) => id !== 'anotacion' || estado.conAnotacion);
+
 /** Lo que cada solapa necesita traído, la primera vez que se la mira. */
 function alEntrarA(id) {
+  // Anotación se vuelve a pedir cada vez que se entra: en el rato que uno
+  // estuvo en otra pestaña se pudo anotar media docena de gente.
+  if (id === 'anotacion') cargarAnotacion().then(render);
+  // Armar mira la misma lista, así que entra con lo último y con el día y la
+  // hora que puso la convocatoria: no hay que volver a tipearlos.
+  if (id === 'armar' && estado.conAnotacion) {
+    cargarAnotacion().then(() => { copiarElDiaDeLaLista(); render(); });
+  }
   if (id === 'ranking' && (!ranking.lista || rankingSucio)) cargarRanking();
   if (id === 'jugador' && (!miFicha.datos || rankingSucio)) abrirJugador(estado.jugador.id, 'mi');
   if (id === 'canchas' && !canchas.datos) cargarCanchas();
@@ -1025,7 +1404,7 @@ function alEntrarA(id) {
 }
 
 function pestanas() {
-  const cuales = estado.jugador.admin ? PESTANAS_ADMIN : PESTANAS_JUGADOR;
+  const cuales = lasPestanas();
 
   return el('div', { class: 'barra-pestanas' }, [
     el('nav', { class: 'pestanas' }, cuales.map(([id, texto]) =>
@@ -1052,8 +1431,10 @@ function render() {
   const raiz = el('div');
   app.appendChild(raiz);
 
-  if (estado.vista === 'armar' && estado.jugador.admin) vistaArmar(raiz);
-  else if (estado.vista === 'plantel' && estado.jugador.admin) vistaPlantel(raiz);
+  if (estado.vista === 'anotacion') vistaAnotacion(raiz);
+  else if (estado.vista === 'armar' && estado.jugador.admin) {
+    if (armado.cambiando) vistaCambiar(raiz); else vistaArmar(raiz);
+  } else if (estado.vista === 'plantel' && estado.jugador.admin) vistaPlantel(raiz);
   else if (estado.vista === 'caballos') vistaCaballos(raiz);
   else if (estado.vista === 'ranking') vistaRanking(raiz);
   else if (estado.vista === 'jugador') vistaJugador(raiz);
@@ -1079,7 +1460,7 @@ async function adentro(jugador, temporada, cumples) {
   estado.jugador = jugador;
   estado.temporada = temporada || null;
   estado.cumples = cumples || null;
-  // La app abre en el ranking, que es la primera solapa y lo que más se mira.
+  // La app abre en el ranking, que es lo que más se mira.
   estado.vista = 'ranking';
 
   document.getElementById('subtitulo').textContent = jugador.apodo;
@@ -1092,6 +1473,19 @@ async function adentro(jugador, temporada, cumples) {
     try { await cargarPlantel(); } catch (e) { armado.error = e.message; }
     render();
   }
+
+  // …salvo que haya una lista abierta y todavía no te hayas anotado: ahí abre
+  // en Anotación, que es a lo que venías.
+  if (estado.conAnotacion) {
+    await cargarAnotacion();
+    const d = anotacion.datos;
+    if (estado.vista === 'ranking' && d && d.convocatoria && !d.convocatoria.cerrada
+        && !d.yo.anotado) {
+      estado.vista = 'anotacion';
+    }
+    render();
+  }
+
   cargarPracticas();
   cargarJornadas();
 }

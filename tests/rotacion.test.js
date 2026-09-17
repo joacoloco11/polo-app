@@ -14,6 +14,7 @@ const {
   repartirPorHandicap, desbalance, desdeGuardado, paraPantalla,
   enfrentamientos, puntosDelPartido, hcpDeLaPractica, ErrorDeArmado,
   ajusteDeHandicap, flechaDe, comoViene,
+  elegirPorNivel, elegirParejo,
 } = require('../lib/polo');
 
 const j = (apodo, color, handicap = 0) => ({ id: apodo, apodo, nombre: apodo, handicap, color });
@@ -475,4 +476,89 @@ test('comoViene ordena por fecha antes de contar', () => {
   // Ajuste: paliza ganada (+1) y después dos derrotas ajustadas (−1) = 0.
   // Flecha: 4 + 2 = 6 → tope 5, y las dos derrotas la dejan en 3 = horizontal.
   assert.deepEqual(comoViene(desordenados), { ajuste: 0, flecha: 0 });
+});
+
+/* ------------------------------------------------- elegir de entre anotados */
+
+// En orden de llegada, como los devuelve la lista de anotados.
+const ANOTADOS = [
+  ['Tabru', 2], ['Crespo', 11], ['Mili', 2], ['Diego K.', 3], ['Emi', 4], ['Flores', 3],
+  ['Gomez J.', 2], ['Bogado', 0], ['Sanchez E.', 6], ['Ventu. Edu', 5], ['Colo', 1],
+  ['Pedrito', 2], ['Neves F.', 3], ['David', 3], ['Sanchez JC', 3], ['Barreto M.', 1],
+  ['Puentes', 1], ['Neves G.', 2],
+].map(([apodo, handicap], i) => ({ id: 'j' + i, apodo, nombre: apodo, handicap }));
+
+const apodos = (lista) => lista.map((x) => x.apodo);
+const difDe = (cantidad, elegidos) =>
+  desbalance(repartirPorHandicap(cantidad, elegidos), cantidad);
+
+test('por nivel agarra los de más handicap', () => {
+  const diez = elegirPorNivel(10, ANOTADOS);
+  assert.equal(diez.length, 10);
+  // Los de +11, +6, +5 y +4 no pueden faltar.
+  ['Crespo', 'Sanchez E.', 'Ventu. Edu', 'Emi'].forEach((quien) => {
+    assert.ok(apodos(diez).includes(quien), quien + ' tendría que estar');
+  });
+  // Y los más bajos no pueden entrar.
+  ['Bogado', 'Colo', 'Barreto M.', 'Puentes'].forEach((quien) => {
+    assert.ok(!apodos(diez).includes(quien), quien + ' no tendría que estar');
+  });
+});
+
+test('por nivel desempata por orden de llegada, no por apellido', () => {
+  // Cuatro de handicap 2 para un solo lugar: entra el primero que se anotó.
+  const empatados = [
+    { id: 'a', apodo: 'Zulema', nombre: 'Zulema', handicap: 2 },
+    { id: 'b', apodo: 'Abel', nombre: 'Abel', handicap: 2 },
+    { id: 'c', apodo: 'Bruno', nombre: 'Bruno', handicap: 2 },
+  ];
+  const altos = [
+    { id: 'x', apodo: 'Alto1', nombre: 'Alto1', handicap: 9 },
+    { id: 'y', apodo: 'Alto2', nombre: 'Alto2', handicap: 8 },
+  ];
+  const ocho = elegirPorNivel(8, altos.concat(empatados, [
+    { id: 'p', apodo: 'P1', nombre: 'P1', handicap: 1 },
+    { id: 'q', apodo: 'P2', nombre: 'P2', handicap: 1 },
+    { id: 'r', apodo: 'P3', nombre: 'P3', handicap: 1 },
+    { id: 's', apodo: 'P4', nombre: 'P4', handicap: 0 },
+  ]));
+  assert.ok(apodos(ocho).includes('Zulema'), 'Zulema se anotó primero de los tres de 2');
+});
+
+test('los elegidos salen en orden de llegada, no por handicap', () => {
+  const diez = elegirPorNivel(10, ANOTADOS);
+  const posicion = new Map(ANOTADOS.map((x, i) => [x.id, i]));
+  const posiciones = diez.map((x) => posicion.get(x.id));
+  assert.deepEqual(posiciones, posiciones.slice().sort((a, b) => a - b));
+});
+
+test('parejo deja los equipos más parejos que por nivel', () => {
+  [8, 9, 10, 12].forEach((cantidad) => {
+    const conNivel = difDe(cantidad, elegirPorNivel(cantidad, ANOTADOS));
+    const conParejo = difDe(cantidad, elegirParejo(cantidad, ANOTADOS));
+    assert.ok(conParejo <= conNivel,
+      `en la de ${cantidad}: parejo dio ${conParejo} y por nivel ${conNivel}`);
+  });
+});
+
+test('parejo respeta el orden de llegada cuando puede', () => {
+  // Todos iguales: no hay nada que equilibrar, así que tienen que entrar los
+  // ocho primeros y no una selección caprichosa.
+  const iguales = Array.from({ length: 14 }, (_, i) => ({
+    id: 'i' + i, apodo: 'J' + i, nombre: 'J' + i, handicap: 3,
+  }));
+  assert.deepEqual(apodos(elegirParejo(8, iguales)),
+    ['J0', 'J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'J7']);
+});
+
+test('con el cupo justo los dos eligen a todos', () => {
+  const justos = ANOTADOS.slice(0, 8);
+  assert.deepEqual(apodos(elegirPorNivel(8, justos)), apodos(justos));
+  assert.deepEqual(apodos(elegirParejo(8, justos)), apodos(justos));
+});
+
+test('no se puede armar con menos anotados que lugares', () => {
+  assert.throws(() => elegirPorNivel(10, ANOTADOS.slice(0, 9)), ErrorDeArmado);
+  assert.throws(() => elegirParejo(10, ANOTADOS.slice(0, 9)), ErrorDeArmado);
+  assert.throws(() => elegirPorNivel(11, ANOTADOS), ErrorDeArmado);
 });
