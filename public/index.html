@@ -250,6 +250,47 @@
   .quien.puesto.bicolor { border-color: var(--gold); }
   .quien.puesto.bicolor .orden { background: var(--gold); }
 
+  /* ---- editar una práctica ya publicada ---------------------------------
+     El que se saca no desaparece: queda tachado con un + al lado, porque la
+     mitad de las veces se lo saca por error. */
+  .quien .orden.saca { background: var(--rojo); color: #fff; font-size: 13px; }
+  .quien.fuera { background: rgba(185,28,28,.045); }
+  .quien.fuera b { text-decoration: line-through; color: var(--muted); font-weight: 500; }
+  .quien.fuera .orden { background: var(--linea-suave); color: #9aa5b8; }
+  .quien.entro { background: rgba(0,137,122,.06); }
+  /* Cuántos hay de cada color contra cuántos van. En rojo, la cuenta no cierra
+     y el botón de guardar no se puede tocar. */
+  .cupos { display: flex; gap: 8px; margin: 10px 0 4px; }
+  .cupos > div {
+    flex: 1; text-align: center; padding: 8px 4px; border: 1px solid var(--line); border-radius: 9px;
+    background: var(--surface);
+  }
+  .cupos span { display: block; font-size: 9px; font-weight: 700; letter-spacing: .8px; color: var(--muted); }
+  .cupos b { display: block; font-size: 15px; margin-top: 2px; }
+  .cupos .azul { border-color: rgba(29,78,216,.35); } .cupos .azul span { color: var(--azul); }
+  .cupos .blanco span { color: var(--blanco); }
+  .cupos .colorado { border-color: rgba(185,28,28,.35); } .cupos .colorado span { color: var(--colorado); }
+  .cupos .bicolor { border-color: rgba(160,119,34,.45); } .cupos .bicolor span { color: var(--gold); }
+  .cupos .mal { border-color: var(--rojo); } .cupos .mal b { color: var(--rojo); }
+  /* El color de cada uno, a la derecha de su renglón: se toca y cambia de
+     equipo. Angosto, porque al lado va el nombre. */
+  .quien .chip.color {
+    flex: 0 0 auto; width: 78px; min-width: 0; min-height: 30px; padding: 6px 4px;
+    font-size: 10px; letter-spacing: 1px;
+  }
+  /* Qué se conserva y qué no, dicho antes de guardar. */
+  .balance { margin-top: 14px; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+  .balance h3 {
+    padding: 9px 12px; background: var(--surface); border-bottom: 1px solid var(--line);
+    font-size: 9.5px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted);
+  }
+  .balance div { display: flex; gap: 9px; padding: 9px 12px; font-size: 12.5px; line-height: 1.45; border-bottom: 1px solid var(--linea-suave); }
+  .balance div:last-child { border-bottom: none; }
+  .balance div.pierde { background: rgba(185,28,28,.05); }
+  .balance i { font-style: normal; font-weight: 700; flex-shrink: 0; }
+  .balance div.conserva i { color: var(--teal); }
+  .balance div.pierde i { color: var(--rojo); }
+
   .pin {
     width: 100%; text-align: center; letter-spacing: 16px; font-size: 30px; padding: 16px 14px 16px 30px;
     background: var(--surface); border: 1px solid var(--line); border-radius: 12px; color: var(--ink);
@@ -926,14 +967,14 @@
      el que tenía guardado. Cambia con cada versión que se publica, junto con
      `lib/version.js`. Sin esto, uno sube los archivos y sigue viendo la app
      vieja hasta que se le ocurre limpiar el navegador. -->
-<script src="logo.js?v=2026.09.23"></script>
-<script src="hoja.js?v=2026.09.23"></script>
-<script src="comun.js?v=2026.09.23"></script>
-<script src="caballos.js?v=2026.09.23"></script>
-<script src="usocanchas.js?v=2026.09.23"></script>
-<script src="ranking.js?v=2026.09.23"></script>
-<script src="anotacion.js?v=2026.09.23"></script>
-<script src="armar.js?v=2026.09.23"></script>
+<script src="logo.js?v=2026.09.24"></script>
+<script src="hoja.js?v=2026.09.24"></script>
+<script src="comun.js?v=2026.09.24"></script>
+<script src="caballos.js?v=2026.09.24"></script>
+<script src="usocanchas.js?v=2026.09.24"></script>
+<script src="ranking.js?v=2026.09.24"></script>
+<script src="anotacion.js?v=2026.09.24"></script>
+<script src="armar.js?v=2026.09.24"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */
 
