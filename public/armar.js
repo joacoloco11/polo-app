@@ -87,7 +87,8 @@ function alternar(id, aMano) {
 /* --------------------------------------------- quiénes se pueden elegir */
 
 /** ¿La lista de anotados es de este día y tiene gente? */
-const hayAnotados = () => !!(anotacion.datos && anotacion.datos.convocatoria
+const hayAnotados = () => !!(estado.conAnotacion
+  && anotacion.datos && anotacion.datos.convocatoria
   && anotacion.datos.convocatoria.fecha === armado.fecha
   && anotacion.datos.anotados.length);
 
@@ -409,6 +410,10 @@ function renglonElegible(j) {
  */
 function cabezaDeLaLista() {
   const caja = el('div');
+  // Sin la solapa Anotación prendida no hay dos listas entre las que elegir:
+  // la de siempre es el plantel, y no hace falta decirlo.
+  if (!estado.conAnotacion) return caja;
+
   const conAnotados = hayAnotados();
   const cuantos = disponibles().length;
 
@@ -919,7 +924,411 @@ function panelBorrar(practica) {
   ]);
 }
 
+/* =========================================================================
+   Editar una práctica ya publicada.
+
+   Editar no es volver a armar. La práctica ya se jugó: lo que se arregla acá
+   es la planilla —el que faltó, el que entró en su lugar, de cuántos se
+   terminó jugando— sin perder el resultado, el MVP ni los caballos que cada
+   uno cargó.
+
+   La pantalla no decide nada de eso: junta los cambios, se los manda al
+   servidor con `guardar: false` y muestra el balance que vuelve. Recién
+   cuando el que edita lo leyó y toca Guardar, se escribe.
+   ========================================================================= */
+
+const edicion = {
+  abierta: false,
+  practicaId: null,
+  fecha: '', hora: '', cancha: 1, cantidad: 10, formatoOriginal: 10,
+  // [{ id, apodo, handicap, color, fuera, entro }] en el orden de la planilla.
+  filas: [],
+  sumando: false,      // está abierta la lista para meter a alguien
+  filtro: '',
+  previa: null,        // lo que devolvió el servidor: planilla y balance
+  clavePrevia: null,   // de qué cambio es esa vista previa
+  pidiendo: false,
+  error: null,
+  listo: false,        // se guardó
+};
+
+const CUPOS_EDICION = (n) => CUPOS[n];
+const activos = () => edicion.filas.filter((f) => !f.fuera);
+const cuantosDe = (color) => activos().filter((f) => f.color === color).length;
+
+/** ¿La cuenta cierra? Tiene que haber exactamente los cupos de cada color. */
+function cuentaCierra() {
+  const cupos = CUPOS_EDICION(edicion.cantidad);
+  return activos().length === edicion.cantidad
+    && Object.keys(cupos).every((c) => cuantosDe(c) === cupos[c]);
+}
+
+/** Con qué cambio se pidió la última vista previa. */
+const claveDeLaEdicion = () => JSON.stringify([
+  edicion.fecha, edicion.hora, edicion.cancha, edicion.cantidad,
+  activos().map((f) => [f.id, f.color]),
+]);
+
+function abrirEdicion(abierta) {
+  const { practica, planilla } = abierta;
+  edicion.abierta = true;
+  edicion.practicaId = practica.id;
+  edicion.fecha = String(practica.fecha).slice(0, 10);
+  edicion.hora = String(practica.hora).slice(0, 5);
+  edicion.cancha = Number(practica.cancha);
+  edicion.cantidad = Number(practica.formato);
+  edicion.formatoOriginal = Number(practica.formato);
+  edicion.filas = planilla.jugadores.map((j) => ({
+    id: j.id, apodo: j.apodo, handicap: j.handicap, color: j.color, fuera: false, entro: false,
+  }));
+  edicion.sumando = false;
+  edicion.filtro = '';
+  edicion.previa = null;
+  edicion.clavePrevia = null;
+  edicion.error = null;
+  edicion.listo = false;
+  render();
+}
+
+function cerrarEdicion() {
+  edicion.abierta = false;
+  edicion.filas = [];
+  edicion.previa = null;
+  render();
+}
+
+/**
+ * Al cambiar de formato los colores se reacomodan solos: el que entra en el
+ * cupo se queda donde está, y el que sobra pasa al primer color con lugar. De
+ * 10 a 9 es lo que hace que el quinto del blanco pase a bicolor.
+ */
+function acomodarLaEdicion() {
+  const cupos = CUPOS_EDICION(edicion.cantidad);
+  const cuenta = {};
+  const sueltos = [];
+
+  activos().forEach((f) => {
+    if (!cupos[f.color]) { sueltos.push(f); return; }
+    cuenta[f.color] = (cuenta[f.color] || 0) + 1;
+    if (cuenta[f.color] > cupos[f.color]) { cuenta[f.color]--; sueltos.push(f); }
+  });
+
+  sueltos.forEach((f) => {
+    const libre = Object.keys(cupos).find((c) => (cuenta[c] || 0) < cupos[c]);
+    if (!libre) { f.color = Object.keys(cupos)[0]; return; }
+    cuenta[libre] = (cuenta[libre] || 0) + 1;
+    f.color = libre;
+  });
+}
+
+/** El color de al lado, dando la vuelta. Es lo que pasa al tocar el chip. */
+function rotarColor(fila) {
+  const colores = Object.keys(CUPOS_EDICION(edicion.cantidad));
+  const i = colores.indexOf(fila.color);
+  fila.color = colores[(i + 1) % colores.length];
+  tocarLaEdicion();
+}
+
+/** Cualquier cambio invalida la vista previa y, si la cuenta cierra, pide otra. */
+function tocarLaEdicion() {
+  edicion.previa = null;
+  edicion.error = null;
+  render();
+  if (cuentaCierra()) pedirVistaPrevia();
+}
+
+async function pedirVistaPrevia() {
+  const clave = claveDeLaEdicion();
+  if (edicion.pidiendo || edicion.clavePrevia === clave) return;
+  edicion.pidiendo = true;
+  // La clave se marca pase lo que pase: si el servidor dijo que no, la pantalla
+  // muestra el motivo y espera otro cambio, en vez de volver a preguntar lo
+  // mismo una y otra vez.
+  edicion.clavePrevia = clave;
+  try {
+    const r = await pedir('/api/practica?id=' + encodeURIComponent(edicion.practicaId), {
+      method: 'PUT',
+      body: JSON.stringify({ ...datosDeLaEdicion(), guardar: false }),
+    });
+    edicion.previa = r;
+    edicion.error = null;
+  } catch (e) {
+    edicion.previa = null;
+    edicion.error = e.message;
+  }
+  edicion.pidiendo = false;
+  render();
+}
+
+const datosDeLaEdicion = () => ({
+  fecha: edicion.fecha,
+  hora: edicion.hora,
+  cancha: edicion.cancha,
+  formato: edicion.cantidad,
+  jugadores: activos().map((f) => ({ id: f.id, color: f.color })),
+});
+
+/* --------------------------------------------------------- la pantalla */
+
+function vistaEditar(raiz) {
+  raiz.appendChild(el('button', {
+    class: 'link', type: 'button', onclick: cerrarEdicion,
+  }, ['‹ Cancelar']));
+
+  raiz.appendChild(titulo('Editar la práctica'));
+  raiz.appendChild(el('p', { class: 'pista', style: 'margin-top:0' }, [
+    fechaLarga(edicion.fecha) + ' · lo que cambies se guarda recién al final.',
+  ]));
+
+  if (edicion.sumando) return listaParaSumar(raiz);
+
+  const campo = (etiqueta, control) =>
+    el('label', { class: 'campo' }, [el('span', {}, [etiqueta]), control]);
+
+  raiz.appendChild(el('div', { class: 'card p' }, [
+    el('div', { class: 'grilla-2' }, [
+      campo('Fecha', el('input', {
+        type: 'date', value: edicion.fecha,
+        onchange: (e) => { edicion.fecha = e.target.value || edicion.fecha; tocarLaEdicion(); },
+      })),
+      campo('Hora', el('input', {
+        type: 'time', value: edicion.hora,
+        onchange: (e) => { edicion.hora = e.target.value || edicion.hora; tocarLaEdicion(); },
+      })),
+    ]),
+    campo('Cancha', el('div', { class: 'chips tres' }, [1, 2, 3, 4, 5, 6].map((n) =>
+      el('button', {
+        type: 'button', class: 'chip', 'aria-pressed': edicion.cancha === n,
+        onclick: () => { edicion.cancha = n; tocarLaEdicion(); },
+      }, [String(n)])))),
+  ]));
+
+  /* ---- de cuántos se terminó jugando */
+
+  raiz.appendChild(el('h2', {}, ['Cuántos jugaron']));
+
+  if (edicion.formatoOriginal === 12) {
+    // Las de 12 son otra cosa: tres equipos, tres partidos y la mitad de
+    // puntos por partido. Cambiarles el formato sería rehacer la práctica.
+    raiz.appendChild(aviso('nota',
+      'En las de 12 no se cambia de cuántos es: son tres equipos y tres partidos, '
+      + 'y la cuenta de puntos es otra. Lo que sí se puede es cambiar un jugador por otro.'));
+  } else {
+    raiz.appendChild(el('div', { class: 'chips tres' }, [8, 9, 10].map((n) =>
+      el('button', {
+        type: 'button', class: 'chip', 'aria-pressed': edicion.cantidad === n,
+        onclick: () => { edicion.cantidad = n; acomodarLaEdicion(); tocarLaEdicion(); },
+      }, [String(n), el('em', {}, [CHUKKERS_DE[n] + ' chk'])]))));
+    raiz.appendChild(el('p', { class: 'pista' }, [
+      edicion.cantidad === edicion.formatoOriginal
+        ? 'Era de ' + edicion.formatoOriginal + '. Las de 12 se arman aparte.'
+        : 'Era de ' + edicion.formatoOriginal + ': pasa a ' + edicion.cantidad
+          + ' y a ' + CHUKKERS_DE[edicion.cantidad] + ' chukkers.',
+    ]));
+  }
+
+  /* ---- los jugadores */
+
+  raiz.appendChild(el('h2', {}, [
+    'Los jugadores', el('em', {}, [activos().length + ' de ' + edicion.cantidad]),
+  ]));
+
+  const cupos = CUPOS_EDICION(edicion.cantidad);
+  raiz.appendChild(el('div', { class: 'cupos' }, Object.keys(cupos).map((color) =>
+    el('div', { class: color + (cuantosDe(color) === cupos[color] ? '' : ' mal') }, [
+      el('span', {}, [Hoja.LABEL[color]]),
+      el('b', {}, [cuantosDe(color) + '/' + cupos[color]]),
+    ]))));
+
+  if (!cuentaCierra()) {
+    raiz.appendChild(aviso('mal', activos().length === edicion.cantidad
+      ? 'Los colores no cierran: tocá el color de alguno para moverlo de equipo.'
+      : 'Quedaron ' + activos().length + ' en una práctica marcada de ' + edicion.cantidad
+        + '. O ponés a alguien en su lugar, o ' + (edicion.formatoOriginal === 12
+          ? 'volvés a meter al que sacaste.'
+          : 'la pasás a ' + activos().length + '.')));
+  }
+
+  raiz.appendChild(el('div', { class: 'lista tabla' }, edicion.filas.map(renglonDeEdicion)));
+
+  raiz.appendChild(el('p', { class: 'pista' }, [
+    'Sacá con − al que no vino. Tocá el color para cambiarlo de equipo.',
+  ]));
+
+  raiz.appendChild(el('div', { class: 'acciones' }, [
+    el('button', {
+      class: 'ghost', type: 'button',
+      onclick: () => { edicion.sumando = true; edicion.filtro = ''; render(); },
+    }, ['Sumar a alguien']),
+  ]));
+
+  /* ---- qué se conserva y qué no */
+
+  if (edicion.error) raiz.appendChild(aviso('mal', edicion.error));
+
+  if (cuentaCierra()) {
+    if (!edicion.previa) {
+      if (!edicion.error) {
+        raiz.appendChild(el('div', { class: 'vacio' }, ['Viendo cómo queda…']));
+        pedirVistaPrevia();
+      }
+    } else {
+      raiz.appendChild(panelBalance(edicion.previa.balance));
+      raiz.appendChild(el('div', { class: 'acciones' }, [
+        el('button', {
+          class: 'primary', type: 'button',
+          onclick: (e) => conBoton(e.target, guardarLaEdicion, edicion),
+        }, ['Guardar los cambios']),
+      ]));
+    }
+  } else {
+    raiz.appendChild(el('div', { class: 'acciones' }, [
+      el('button', { class: 'primary', type: 'button', disabled: true }, ['Guardar los cambios']),
+    ]));
+    raiz.appendChild(el('p', { class: 'pista', style: 'text-align:center' }, [
+      'El botón no se puede tocar hasta que la cuenta cierre.',
+    ]));
+  }
+}
+
+const CHUKKERS_DE = { 8: 6, 9: 7, 10: 8, 12: 9 };
+
+function renglonDeEdicion(f) {
+  const chip = el('button', {
+    type: 'button', class: 'chip color ' + f.color, 'aria-pressed': 'true',
+    style: 'padding:5px 9px',
+    onclick: (e) => { e.stopPropagation(); rotarColor(f); },
+    disabled: f.fuera,
+  }, [Hoja.LABEL[f.color]]);
+
+  return el('div', { class: 'quien compacto' + (f.fuera ? ' fuera' : '') + (f.entro ? ' entro' : '') }, [
+    el('button', {
+      type: 'button', class: 'orden' + (f.fuera ? '' : ' saca'),
+      'aria-label': (f.fuera ? 'Volver a poner a ' : 'Sacar a ') + f.apodo,
+      onclick: () => { f.fuera = !f.fuera; tocarLaEdicion(); },
+    }, [f.fuera ? '+' : '−']),
+    el('span', { style: 'flex:1;min-width:0' }, [
+      el('b', {}, [f.apodo]),
+      f.fuera ? el('span', {}, ['no vino']) : (f.entro ? el('span', {}, ['entró en su lugar']) : null),
+    ].filter(Boolean)),
+    chip,
+  ]);
+}
+
+/** Meter a alguien del plantel que no está en la planilla. */
+function listaParaSumar(raiz) {
+  raiz.appendChild(el('h2', {}, ['Sumar a alguien']));
+
+  const puestos = new Set(edicion.filas.map((f) => f.id));
+  const texto = (edicion.filtro || '').trim().toLowerCase();
+  const gente = estado.plantel
+    .filter((j) => j.activo && !puestos.has(j.id))
+    .filter((j) => !texto || j.apodo.toLowerCase().includes(texto)
+      || String(j.nombre || '').toLowerCase().includes(texto));
+
+  raiz.appendChild(el('input', {
+    type: 'text', placeholder: 'Buscar…', value: edicion.filtro || '',
+    'aria-label': 'Buscar un jugador',
+    oninput: (e) => { edicion.filtro = e.target.value; render(); },
+  }));
+
+  if (!gente.length) {
+    raiz.appendChild(el('div', { class: 'vacio' }, ['No hay nadie que coincida.']));
+  } else {
+    raiz.appendChild(el('div', { class: 'lista tabla', style: 'margin-top:8px' }, gente.map((j) =>
+      el('button', {
+        type: 'button', class: 'quien compacto',
+        onclick: () => {
+          // Entra en el lugar del primero que se sacó: se queda con su color,
+          // que es el que quedó libre, y su renglón en la planilla.
+          const hueco = edicion.filas.find((f) => f.fuera && !f.reemplazado);
+          const color = hueco ? hueco.color : (colorConLugarEnLaEdicion() || 'azul');
+          const nuevo = {
+            id: j.id, apodo: j.apodo, handicap: Number(j.hcp_efectivo) || 0,
+            color, fuera: false, entro: true,
+          };
+          if (hueco) {
+            hueco.reemplazado = true;
+            edicion.filas.splice(edicion.filas.indexOf(hueco) + 1, 0, nuevo);
+          } else {
+            edicion.filas.push(nuevo);
+          }
+          edicion.sumando = false;
+          edicion.filtro = '';
+          tocarLaEdicion();
+        },
+      }, [
+        el('span', { class: 'orden' }, ['+']),
+        el('span', { style: 'flex:1;min-width:0' }, [el('b', {}, [j.apodo])]),
+        el('span', { class: 'hcp' }, [hcp(Number(j.hcp_efectivo) || 0)]),
+      ]))));
+  }
+
+  raiz.appendChild(el('div', { class: 'acciones' }, [
+    el('button', {
+      class: 'ghost', type: 'button',
+      onclick: () => { edicion.sumando = false; edicion.filtro = ''; render(); },
+    }, ['Volver']),
+  ]));
+}
+
+function colorConLugarEnLaEdicion() {
+  const cupos = CUPOS_EDICION(edicion.cantidad);
+  return Object.keys(cupos).find((c) => cuantosDe(c) < cupos[c]) || null;
+}
+
+/** El balance que armó el servidor, tal cual viene. */
+function panelBalance(b) {
+  const caja = el('div', { class: 'balance' }, [
+    el('h3', {}, ['Qué pasa con lo cargado']),
+  ]);
+  b.enPalabras.conserva.forEach((t) =>
+    caja.appendChild(el('div', { class: 'conserva' }, [el('i', {}, ['✓']), el('span', {}, [t])])));
+  b.enPalabras.pierde.forEach((t) =>
+    caja.appendChild(el('div', { class: 'pierde' }, [el('i', {}, ['✕']), el('span', {}, [t])])));
+  if (!b.enPalabras.pierde.length) {
+    caja.appendChild(el('div', { class: 'conserva' }, [
+      el('i', {}, ['✓']), el('span', {}, ['No se pierde nada de lo que ya estaba cargado.']),
+    ]));
+  }
+  return caja;
+}
+
+async function guardarLaEdicion() {
+  await pedir('/api/practica?id=' + encodeURIComponent(edicion.practicaId), {
+    method: 'PUT',
+    body: JSON.stringify({ ...datosDeLaEdicion(), guardar: true }),
+  });
+  const id = edicion.practicaId;
+  edicion.abierta = false;
+  edicion.filas = [];
+  edicion.previa = null;
+  practicas.lista = null;
+  await abrirPractica(id);
+  await cargarPracticas();
+  cargarJornadas();      // pueden haber cambiado los chukkers de los caballos
+  rankingSucio = true;   // y con eso, los puntos
+}
+
+/* ---------------------------------------------------------- la puerta */
+
+/**
+ * El botón que abre la edición. Va abajo de la planilla y arriba del link de
+ * borrar, con una línea que diga para qué es cada uno: son dos cosas muy
+ * distintas y quedan pegadas.
+ */
+function panelEditar(abierta) {
+  return el('div', { style: 'margin-top:10px' }, [
+    el('button', {
+      class: 'ghost', type: 'button',
+      onclick: () => abrirEdicion(abierta),
+    }, ['✎ Editar la práctica']),
+  ]);
+}
+
 function vistaPracticas(raiz) {
+  if (edicion.abierta) return vistaEditar(raiz);
+
   if (practicas.abierta) {
     const { practica, planilla } = practicas.abierta;
     raiz.appendChild(el('button', {
@@ -942,7 +1351,14 @@ function vistaPracticas(raiz) {
     if (estado.jugador.admin) raiz.appendChild(panelCargarResultado(practicas.abierta));
 
     if (practicas.error) raiz.appendChild(aviso('mal', practicas.error));
-    if (estado.jugador.admin) raiz.appendChild(panelBorrar(practica));
+    if (estado.jugador.admin) {
+      raiz.appendChild(panelEditar(practicas.abierta));
+      raiz.appendChild(panelBorrar(practica));
+      raiz.appendChild(el('p', { class: 'pista', style: 'text-align:center' }, [
+        'Editar es para arreglar lo que pasó: el que faltó, el que entró en su lugar, '
+        + 'de cuántos se terminó jugando. Borrar se lleva todo.',
+      ]));
+    }
     return;
   }
 
@@ -1362,8 +1778,9 @@ function formularioDeCorreccion(j) {
 /* El orden es el que pidió el club: primero lo que se mira todos los días
    —el ranking y la ficha propia—, después los caballos, y las herramientas de
    organizar al final. */
-/* Anotación va primera: es lo que se toca durante la semana, todos los días,
-   y lo único que la mitad del club necesita abrir. */
+/* Anotación va primera —es lo que se toca durante la semana, todos los días— y
+   solo si está prendida en esta copia: mientras el club no la use, la solapa no
+   está y Armar elige del plantel como siempre. */
 const PESTANAS_ADMIN = [
   ['anotacion', 'Anotación'],
   ['ranking', 'Ranking'], ['jugador', 'Jugador'], ['caballos', 'Caballos'],
@@ -1376,6 +1793,9 @@ const PESTANAS_JUGADOR = [
   ['practicas', 'Prácticas'],
 ];
 
+const lasPestanas = () => (estado.jugador.admin ? PESTANAS_ADMIN : PESTANAS_JUGADOR)
+  .filter(([id]) => id !== 'anotacion' || estado.conAnotacion);
+
 /** Lo que cada solapa necesita traído, la primera vez que se la mira. */
 function alEntrarA(id) {
   // Anotación se vuelve a pedir cada vez que se entra: en el rato que uno
@@ -1383,7 +1803,9 @@ function alEntrarA(id) {
   if (id === 'anotacion') cargarAnotacion().then(render);
   // Armar mira la misma lista, así que entra con lo último y con el día y la
   // hora que puso la convocatoria: no hay que volver a tipearlos.
-  if (id === 'armar') cargarAnotacion().then(() => { copiarElDiaDeLaLista(); render(); });
+  if (id === 'armar' && estado.conAnotacion) {
+    cargarAnotacion().then(() => { copiarElDiaDeLaLista(); render(); });
+  }
   if (id === 'ranking' && (!ranking.lista || rankingSucio)) cargarRanking();
   if (id === 'jugador' && (!miFicha.datos || rankingSucio)) abrirJugador(estado.jugador.id, 'mi');
   if (id === 'canchas' && !canchas.datos) cargarCanchas();
@@ -1393,7 +1815,7 @@ function alEntrarA(id) {
 }
 
 function pestanas() {
-  const cuales = estado.jugador.admin ? PESTANAS_ADMIN : PESTANAS_JUGADOR;
+  const cuales = lasPestanas();
 
   return el('div', { class: 'barra-pestanas' }, [
     el('nav', { class: 'pestanas' }, cuales.map(([id, texto]) =>
@@ -1465,13 +1887,15 @@ async function adentro(jugador, temporada, cumples) {
 
   // …salvo que haya una lista abierta y todavía no te hayas anotado: ahí abre
   // en Anotación, que es a lo que venías.
-  await cargarAnotacion();
-  const d = anotacion.datos;
-  if (estado.vista === 'ranking' && d && d.convocatoria && !d.convocatoria.cerrada
-      && !d.yo.anotado) {
-    estado.vista = 'anotacion';
+  if (estado.conAnotacion) {
+    await cargarAnotacion();
+    const d = anotacion.datos;
+    if (estado.vista === 'ranking' && d && d.convocatoria && !d.convocatoria.cerrada
+        && !d.yo.anotado) {
+      estado.vista = 'anotacion';
+    }
+    render();
   }
-  render();
 
   cargarPracticas();
   cargarJornadas();

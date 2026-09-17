@@ -231,7 +231,7 @@ window.Hoja = (function () {
       'Puntualidad.',
       'Cambios rápidos entre chukkers.',
       'Mantener limpia la zona de Palenques.',
-      'Manager de polo Tito Bogado.        +54 9 11 6865-5766',
+      'Manager de polo Tito Bogado.        +54 9 11 5133-9095',
     ];
     ctx.font = fuente(32);
     ctx.fillStyle = TINTA.negro;
@@ -404,7 +404,7 @@ window.Hoja = (function () {
     }
     lineas.push('Puntualidad. Cambios rápidos entre chukkers.');
     lineas.push('Mantener limpia la zona de palenques.');
-    lineas.push('Manager de polo: Tito Bogado. +54 9 11 6865-5766');
+    lineas.push('Manager de polo: Tito Bogado. +54 9 11 5133-9095');
     return lineas.join('\n');
   }
 

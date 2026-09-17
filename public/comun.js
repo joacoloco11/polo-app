@@ -10,7 +10,7 @@
  * abajo de la pantalla se lee otra, el celular se quedó con el código viejo y
  * lo único que hace falta es recargar.
  */
-const VERSION = '2026.09.22';
+const VERSION = '2026.09.24';
 
 const estado = {
   jugador: null,     // quién entró
@@ -18,6 +18,10 @@ const estado = {
   vista: 'practicas',
   plantel: [],       // el plantel completo (solo lo trae un administrador)
   cumples: null,     // los cumpleaños del club (solo para un administrador)
+  // Si esta copia tiene prendida la solapa Anotación. Lo manda el servidor:
+  // en la de prueba está prendida y en la del club se prende cuando el club
+  // esté listo, agregando `ANOTACION=si` en Vercel.
+  conAnotacion: false,
 };
 
 /**

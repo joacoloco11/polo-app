@@ -1599,6 +1599,26 @@ function estadisticas() {
 
 const unDecimal = (n) => n.toFixed(1).replace('.', ',');
 
+/**
+ * Las marcas de "ese día no lo montaste vos", con la misma gramática que el
+ * calendario: el punto es alguien del grupo, el asterisco es fuera del club.
+ * Van solo cuando el caballo no tiene ningún chukker tuyo.
+ */
+function marcasDeQuienLoMonto(s) {
+  if (s.mios) return [];
+  const marcas = [];
+  if (s.deOtros) {
+    marcas.push(el('i', {
+      class: 'punto-ajeno',
+      title: 'Lo montó ' + (s.jinetes.length ? enTexto(s.jinetes) : 'alguien del grupo'),
+    }));
+  }
+  if (s.afuera) {
+    marcas.push(el('span', { class: 'marca-afuera', title: 'Jugó fuera del club' }, ['*']));
+  }
+  return marcas;
+}
+
 function ordenar(stats) {
   return stats.slice().sort((a, b) => {
     if (caballos.orden === 'promedio') {
@@ -1669,14 +1689,10 @@ function panelEstadisticas(raiz) {
       el('span', { style: 'flex:1;min-width:0' }, [
         el('b', { style: s.caballo.lesionado ? 'color:var(--rojo)' : null }, [
           s.caballo.lesionado ? icono('cruz', 11, 'cruz-fila') : null,
-          // El punto dice que esos chukkers no los montaste vos: los jugó
-          // alguien del grupo. El caballo los jugó igual, pero no con vos.
-          !s.mios && s.deOtros
-            ? el('i', {
-              class: 'punto-ajeno',
-              title: 'No lo jugaste vos' + (s.jinetes.length ? ': ' + enTexto(s.jinetes) : ''),
-            })
-            : null,
+          // Las mismas dos marcas que el calendario: el punto dice que esos
+          // chukkers los montó alguien del grupo, el asterisco que los jugó
+          // fuera del club. El caballo los jugó igual, pero no con vos.
+          ...marcasDeQuienLoMonto(s),
           s.caballo.nombre,
         ].filter(Boolean)),
         caballos.deQuien === 'grupo' && (s.caballo.duenios || []).length
@@ -1691,12 +1707,16 @@ function panelEstadisticas(raiz) {
     ])),
   ]));
 
-  // Qué quiere decir el punto, dicho una sola vez y solo cuando hay alguno.
-  const ajenos = ordenados.filter((s) => !s.mios && s.deOtros);
-  if (ajenos.length) {
+  // Qué quieren decir las marcas, dicho una sola vez y solo si están.
+  if (ordenados.some((s) => !s.mios && s.deOtros)) {
     raiz.appendChild(el('p', { class: 'pista' }, [
-      el('i', { class: 'punto-ajeno' }), 'Esos chukkers no los montaste vos: '
-      + 'los jugó alguien del grupo. Cuentan igual, porque son patas del caballo.',
+      el('i', { class: 'punto-ajeno' }), 'Esos chukkers los montó alguien del grupo.',
+    ]));
+  }
+  if (ordenados.some((s) => !s.mios && s.afuera)) {
+    raiz.appendChild(el('p', { class: 'pista' }, [
+      el('span', { class: 'marca-afuera' }, ['*']),
+      'Esos los jugó fuera del club. Cuentan igual: son patas del caballo.',
     ]));
   }
 
@@ -1922,23 +1942,59 @@ const colorDeCelda = (celda) => (celda.chukkers <= 0 ? CELDA_VACIA
  */
 function formaDeCelda(celda) {
   const jugo = celda.chukkers > 0;
-  // El día que hubo práctica y además jugó afuera es un día jugado como
-  // cualquiera: la diferencia la hace el punto, no el color. La diagonal del
+  // El día que hubo práctica y además jugó con otro es un día jugado como
+  // cualquiera: la diferencia la hace la marca, no el color. La diagonal del
   // torneo solo vale si lo del torneo fue todo lo que jugó.
-  const soloAfuera = jugo && celda.afuera >= celda.chukkers;
+  const conOtro = (celda.afuera || 0) + (celda.delGrupo || 0);
+  const soloConOtro = jugo && conOtro >= celda.chukkers;
   return {
     jugo,
     relleno: colorDeCelda(celda),
-    diagonal: jugo && celda.torneo && !soloAfuera,
-    medio: jugo && celda.torneo && !soloAfuera && celda.chukkers <= 0.5,
-    punto: !!celda.afuera,
+    diagonal: jugo && celda.torneo && !soloConOtro,
+    medio: jugo && celda.torneo && !soloConOtro && celda.chukkers <= 0.5,
+    // Quién lo montó ese día, cuando no fuiste vos: el punto para el que
+    // comparte tu caballada, el asterisco para cualquier otro.
+    punto: !!celda.delGrupo,
+    estrella: !!celda.afuera,
   };
 }
 
-/* El punto de los chukkers de afuera: negro con un halo blanco, porque sobre
-   el verde más oscuro —un caballo de 9 o 10— el negro solo se pierde. */
+/* Las dos marcas de "ese día lo montó otro": negras con un halo blanco, porque
+   sobre el verde más oscuro —un caballo de 9 o 10— el negro solo se pierde.
+
+   El PUNTO es alguien del grupo: se sabe quién y con qué caballo jugó. El
+   ASTERISCO es de afuera del club, que es lo que se carga a mano y de lo que
+   no hay planilla. */
 const PUNTO_AFUERA = '#16202e';
 const HALO_AFUERA = '#ffffff';
+
+/** El asterisco: tres rayas cruzadas por el centro, del largo que se le pida. */
+function asteriscoSVG(cx, cy, r) {
+  return [0, 60, 120].map((grados) => {
+    const a = (grados * Math.PI) / 180;
+    const dx = Math.cos(a) * r;
+    const dy = Math.sin(a) * r;
+    return 'M' + (cx - dx).toFixed(2) + ' ' + (cy - dy).toFixed(2)
+      + 'L' + (cx + dx).toFixed(2) + ' ' + (cy + dy).toFixed(2);
+  }).join('');
+}
+
+/** El mismo asterisco, en canvas para el JPG. */
+function asteriscoCanvas(ctx, cx, cy, r, grosor) {
+  ctx.beginPath();
+  [0, 60, 120].forEach((grados) => {
+    const a = (grados * Math.PI) / 180;
+    const dx = Math.cos(a) * r;
+    const dy = Math.sin(a) * r;
+    ctx.moveTo(cx - dx, cy - dy);
+    ctx.lineTo(cx + dx, cy + dy);
+  });
+  ctx.strokeStyle = PUNTO_AFUERA;
+  ctx.lineWidth = grosor;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+}
 
 /**
  * Mete, entre las jornadas, un renglón vacío por cada día del calendario en el
@@ -2025,8 +2081,10 @@ function planoDelCalendario(stats, medidas) {
         // El torneo exige distinto que la práctica: el cuadrito lo dice con
         // una diagonal, y si el caballo hizo medio chukker se llena la mitad.
         torneo: ev.tipo === 'aap',
-        // Ese día jugó también afuera: lo dice un punto en el centro.
+        // Ese día lo montó otro: un asterisco si fue afuera del club, un punto
+        // si fue alguien del grupo.
         afuera: deAfuera,
+        delGrupo: deOtros,
       };
     });
     const jugadas = celdas.map((c, i) => (c.chukkers > 0 ? i : -1)).filter((i) => i >= 0);
@@ -2129,18 +2187,31 @@ function grafico(raiz, stats) {
     + 'vea el descanso. Deslizá de costado para ver toda la temporada.',
   ]));
 
-  // La referencia del punto, solo si hay alguno: si no, es una aclaración de
-  // algo que no está en el dibujo.
-  if ((caballos.extras || []).length) {
+  /* Las referencias de las marcas, cada una solo si está en el dibujo: una
+     aclaración de algo que no se ve es ruido. */
+  const cuadrito = (adentro) => {
     const marca = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     marca.setAttribute('width', 15);
     marca.setAttribute('height', 15);
     marca.setAttribute('viewBox', '0 0 15 15');
-    marca.innerHTML = '<rect x="0.5" y="0.5" width="14" height="14" rx="3" fill="' + RAMPA_PUNTAJE[2] + '"/>'
-      + '<circle cx="7.5" cy="7.5" r="3.2" fill="' + HALO_AFUERA + '" opacity="0.92"/>'
-      + '<circle cx="7.5" cy="7.5" r="2.5" fill="' + PUNTO_AFUERA + '"/>';
+    marca.innerHTML = '<rect x="0.5" y="0.5" width="14" height="14" rx="3" fill="'
+      + RAMPA_PUNTAJE[2] + '"/>'
+      + '<circle cx="7.5" cy="7.5" r="3.4" fill="' + HALO_AFUERA + '" opacity="0.92"/>'
+      + adentro;
+    return marca;
+  };
+
+  if (plano.filas.some((f) => f.celdas.some((c) => c.delGrupo))) {
     raiz.appendChild(el('p', { class: 'ref-afuera' }, [
-      marca, el('span', {}, ['el punto negro marca los chukkers que jugó fuera del club']),
+      cuadrito('<circle cx="7.5" cy="7.5" r="2.5" fill="' + PUNTO_AFUERA + '"/>'),
+      el('span', {}, ['el punto marca los chukkers que montó alguien del grupo']),
+    ]));
+  }
+  if (plano.filas.some((f) => f.celdas.some((c) => c.afuera))) {
+    raiz.appendChild(el('p', { class: 'ref-afuera' }, [
+      cuadrito('<path d="' + asteriscoSVG(7.5, 7.5, 3) + '" stroke="' + PUNTO_AFUERA
+        + '" stroke-width="1.3" stroke-linecap="round" fill="none"/>'),
+      el('span', {}, ['el asterisco, los que jugó fuera del club']),
     ]));
   }
 
@@ -2211,18 +2282,26 @@ function grafico(raiz, stats) {
         }));
       }
 
-      // El punto de los chukkers de afuera, en el centro del cuadradito.
-      if (f.punto) {
+      // La marca de quién lo montó, en el centro del cuadradito.
+      if (f.punto || f.estrella) {
         const cx = x[c] + M.celda / 2;
         const cy = y + M.celda / 2;
-        g.appendChild(nodo('circle', { cx, cy, r: 3.2, fill: HALO_AFUERA, opacity: 0.92 }));
-        g.appendChild(nodo('circle', { cx, cy, r: 2.5, fill: PUNTO_AFUERA }));
+        g.appendChild(nodo('circle', { cx, cy, r: 3.4, fill: HALO_AFUERA, opacity: 0.92 }));
+        if (f.estrella) {
+          g.appendChild(nodo('path', {
+            d: asteriscoSVG(cx, cy, 3),
+            stroke: PUNTO_AFUERA, 'stroke-width': 1.3, 'stroke-linecap': 'round', fill: 'none',
+          }));
+        } else {
+          g.appendChild(nodo('circle', { cx, cy, r: 2.5, fill: PUNTO_AFUERA }));
+        }
       }
 
       const detalle = fila.caballo.nombre + ' · ' + Hoja.fechaCorta(celda.fecha) + ' · '
         + (f.jugo
           ? cantidad(celda.chukkers) + (celda.chukkers === 1 ? ' chukker' : ' chukkers')
-            + (celda.torneo && !f.punto ? ' de torneo' : '')
+            + (celda.torneo && !f.punto && !f.estrella ? ' de torneo' : '')
+            + (celda.delGrupo ? ' · ' + cantidad(celda.delGrupo) + ' con otro del grupo' : '')
             + (celda.afuera ? ' · ' + cantidad(celda.afuera) + ' afuera del club' : '')
             + (celda.puntaje ? ' · puntaje ' + celda.puntaje : ' · sin puntaje')
           : 'no jugó');
@@ -2333,9 +2412,18 @@ function calendarioEnCanvas(stats) {
 
   const margen = 60;
   const cabecera = 200;
-  const pieAlto = 190;
   const grillaAlto = filas.length * M.fila;
   const ancho = Math.max(1100, margen * 2 + M.etiqueta + plano.anchoGrilla);
+
+  // Las marcas de "lo montó otro" entran en la referencia solo si están en el
+  // dibujo: explicar algo que no se ve confunde más de lo que aclara.
+  const marcas = {
+    grupo: filas.some((f) => f.celdas.some((c) => c.delGrupo)),
+    afuera: filas.some((f) => f.celdas.some((c) => c.afuera)),
+  };
+  // El pie crece con la referencia: cada llave de más puede empujar un renglón,
+  // y si el alto no lo contempla el texto del final se sale del dibujo.
+  const pieAlto = 190 + (marcas.grupo || marcas.afuera ? 40 : 0);
   const alto = cabecera + grillaAlto + M.eje + pieAlto;
 
   const canvas = document.createElement('canvas');
@@ -2472,22 +2560,26 @@ function calendarioEnCanvas(stats) {
         ctx.lineCap = 'butt';
       }
 
-      // El punto de los chukkers de afuera. Mismas proporciones que en
-      // pantalla: el halo mide un tercio del cuadradito.
-      if (f.punto) {
+      // La marca de quién lo montó. Mismas proporciones que en pantalla: el
+      // halo mide un tercio del cuadradito.
+      if (f.punto || f.estrella) {
         const px = cx + M.celda / 2;
         const py = y + M.celda / 2;
         const r = M.celda * 0.18;
         ctx.beginPath();
-        ctx.arc(px, py, r * 1.28, 0, Math.PI * 2);
+        ctx.arc(px, py, r * 1.36, 0, Math.PI * 2);
         ctx.fillStyle = HALO_AFUERA;
         ctx.globalAlpha = 0.92;
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.beginPath();
-        ctx.arc(px, py, r, 0, Math.PI * 2);
-        ctx.fillStyle = PUNTO_AFUERA;
-        ctx.fill();
+        if (f.estrella) {
+          asteriscoCanvas(ctx, px, py, r * 1.2, Math.max(2, r * 0.52));
+        } else {
+          ctx.beginPath();
+          ctx.arc(px, py, r, 0, Math.PI * 2);
+          ctx.fillStyle = PUNTO_AFUERA;
+          ctx.fill();
+        }
       }
     });
 
@@ -2523,7 +2615,7 @@ function calendarioEnCanvas(stats) {
   ctx.textAlign = 'left';
 
   /* ---- la referencia y el pie */
-  referenciaEnCanvas(ctx, margen, y0 + grillaAlto + M.eje + 46, ancho - margen * 2);
+  referenciaEnCanvas(ctx, margen, y0 + grillaAlto + M.eje + 46, ancho - margen * 2, marcas);
 
   ctx.font = Hoja.fuente(21);
   ctx.fillStyle = TINTA_EJE;
@@ -2545,7 +2637,7 @@ function redondeado(ctx, x, y, ancho, alto, r) {
 }
 
 /** La misma referencia que en pantalla, acomodada en renglones. */
-function referenciaEnCanvas(ctx, x, y, ancho) {
+function referenciaEnCanvas(ctx, x, y, ancho, marcas) {
   const llaves = [
     { texto: 'puntaje 1 a 4', color: RAMPA_PUNTAJE[0] },
     { texto: '5 y 6', color: RAMPA_PUNTAJE[1] },
@@ -2558,6 +2650,12 @@ function referenciaEnCanvas(ctx, x, y, ancho) {
     { texto: 'torneo', color: RAMPA_PUNTAJE[2], forma: 'torneo' },
     { texto: 'medio chukker', color: RAMPA_PUNTAJE[2], forma: 'medio' },
   ];
+  if (marcas && marcas.grupo) {
+    llaves.push({ texto: 'lo montó el grupo', color: RAMPA_PUNTAJE[2], forma: 'punto' });
+  }
+  if (marcas && marcas.afuera) {
+    llaves.push({ texto: 'fuera del club', color: RAMPA_PUNTAJE[2], forma: 'asterisco' });
+  }
 
   ctx.font = Hoja.fuente(21);
   ctx.textAlign = 'left';
@@ -2608,6 +2706,25 @@ function referenciaEnCanvas(ctx, x, y, ancho) {
       ctx.lineCap = 'round';
       ctx.stroke();
       ctx.lineCap = 'butt';
+    } else if (llave.forma === 'punto' || llave.forma === 'asterisco') {
+      const t = cy - 17;
+      redondeado(ctx, cx, t, 22, 22, 4);
+      ctx.fillStyle = llave.color;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + 11, t + 11, 5.4, 0, Math.PI * 2);
+      ctx.fillStyle = HALO_AFUERA;
+      ctx.globalAlpha = 0.92;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      if (llave.forma === 'asterisco') {
+        asteriscoCanvas(ctx, cx + 11, t + 11, 4.8, 2.1);
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx + 11, t + 11, 4, 0, Math.PI * 2);
+        ctx.fillStyle = PUNTO_AFUERA;
+        ctx.fill();
+      }
     } else {
       redondeado(ctx, cx, cy - 17, 22, 22, 4);
       ctx.fillStyle = llave.color;
