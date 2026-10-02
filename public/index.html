@@ -773,6 +773,35 @@
   .cumple svg { flex-shrink: 0; color: var(--gold); }
   .cumple.hoy { border-color: var(--rojo); background: rgba(198,40,40,.05); }
   .cumple.hoy svg, .cumple.hoy b { color: var(--rojo); }
+  /* Mientras falte gente, el cartel es la puerta para cargarlos. */
+  .cumple.falta { border-color: rgba(160,119,34,.5); background: rgba(160,119,34,.07); }
+  .ir-cumples {
+    margin-left: auto; flex-shrink: 0; font: inherit; font-size: 12px; font-weight: 600;
+    color: var(--teal); background: var(--ground); border: 1px solid rgba(0,137,122,.4);
+    border-radius: 8px; padding: 9px 11px; cursor: pointer; min-height: 38px;
+  }
+  /* A quién le falta el cumpleaños, dicho en su renglón del plantel. */
+  .falta-cumple {
+    font-size: 9px; letter-spacing: .9px; color: var(--gold); white-space: nowrap; flex-shrink: 0;
+    border: 1px solid rgba(160,119,34,.45); border-radius: 4px; padding: 3px 6px;
+  }
+  /* Cuándo cumple, abajo del casillero de la fecha. */
+  .nota-cumple {
+    display: flex; align-items: center; gap: 9px; margin-top: 8px;
+    border: 1px solid rgba(0,137,122,.35); background: rgba(0,137,122,.07);
+    border-radius: 9px; padding: 9px 11px;
+  }
+  .nota-cumple svg { flex-shrink: 0; color: var(--teal); }
+  .nota-cumple b { display: block; font-family: var(--serif); font-size: 13px; font-weight: 600; }
+  .nota-cumple span { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .nota-cumple.hoy { border-color: var(--rojo); background: rgba(198,40,40,.06); }
+  .nota-cumple.hoy svg, .nota-cumple.hoy b { color: var(--rojo); }
+  button.link.sacar { color: var(--rojo); }
+  /* El casillero de fecha en la lista de los que faltan: angosto, al lado del
+     nombre, para que entren muchos renglones en la pantalla. */
+  input.fecha-chica {
+    width: 148px; flex: 0 0 auto; min-height: 38px; padding: 7px 9px; font-size: 13px;
+  }
   /* El día que alguien cumple, la solapa del plantel se pone en rojo. */
   .pestana .de-cumple { color: var(--rojo); }
   /* Cuánto le movieron el handicap interno los resultados: la flecha con su
@@ -967,14 +996,14 @@
      el que tenía guardado. Cambia con cada versión que se publica, junto con
      `lib/version.js`. Sin esto, uno sube los archivos y sigue viendo la app
      vieja hasta que se le ocurre limpiar el navegador. -->
-<script src="logo.js?v=2026.09.24"></script>
-<script src="hoja.js?v=2026.09.24"></script>
-<script src="comun.js?v=2026.09.24"></script>
-<script src="caballos.js?v=2026.09.24"></script>
-<script src="usocanchas.js?v=2026.09.24"></script>
-<script src="ranking.js?v=2026.09.24"></script>
-<script src="anotacion.js?v=2026.09.24"></script>
-<script src="armar.js?v=2026.09.24"></script>
+<script src="logo.js?v=2026.09.25"></script>
+<script src="hoja.js?v=2026.09.25"></script>
+<script src="comun.js?v=2026.09.25"></script>
+<script src="caballos.js?v=2026.09.25"></script>
+<script src="usocanchas.js?v=2026.09.25"></script>
+<script src="ranking.js?v=2026.09.25"></script>
+<script src="anotacion.js?v=2026.09.25"></script>
+<script src="armar.js?v=2026.09.25"></script>
 <script>
 /* ------------------------------------------------------------------ entrar */
 

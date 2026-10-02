@@ -1503,10 +1503,90 @@ function abrirCorreccion(j) {
       categoria: j.categoria,
       invitado_por: j.invitado_por_id || '',
       activo: j.activo,
+      // Vacío si no la tiene. Viaja siempre, así que dejarla en blanco y
+      // guardar es lo que la saca.
+      fecha_nacimiento: j.fecha_nacimiento || '',
     };
   }
   corrigiendo.error = null;
   render();
+}
+
+/* ---------------------------------------------------------- cumpleaños */
+
+/**
+ * Cuándo cumple y cuántos, para la ficha. La cuenta está también en el
+ * servidor (`lib/cumple.js`), pero acá hace falta que se mueva en el mismo
+ * toque en que se escribe la fecha, sin ir y volver.
+ */
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function cuandoCumple(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return null;
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  const hoy = new Date(hoy_() + 'T12:00:00');
+
+  const enElAno = (a) => {
+    const d = new Date(a, mes - 1, dia, 12);
+    // El 29 de febrero, en un año que no es bisiesto, se corre al 28.
+    return d.getMonth() === mes - 1 ? d : new Date(a, mes, 0, 12);
+  };
+  let cuando = enElAno(hoy.getFullYear());
+  if (cuando < hoy) cuando = enElAno(hoy.getFullYear() + 1);
+
+  const dias = Math.round((cuando - hoy) / 86400000);
+  return {
+    dias,
+    edad: cuando.getFullYear() - ano,
+    titulo: dias === 0
+      ? 'Cumple ' + (cuando.getFullYear() - ano) + ' hoy'
+      : 'Cumple ' + (cuando.getFullYear() - ano) + ' el ' + DIAS_SEMANA[cuando.getDay()]
+        + ' ' + cuando.getDate() + ' de ' + MESES_LARGO[cuando.getMonth()],
+    cuando: dias === 0 ? 'Es hoy.' : dias === 1 ? 'Es mañana.' : 'Faltan ' + dias + ' días.',
+  };
+}
+
+/** Hoy en el huso del club, igual que lo cuenta el servidor. */
+const hoy_ = () => new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+/** El casillero del cumpleaños, con lo que dice abajo. Lo usan las dos fichas. */
+function campoDeCumple(valor, alCambiar) {
+  const caja = el('div', {});
+  const campo = el('input', {
+    type: 'date', value: valor || '', max: hoy_(), min: '1920-01-01',
+    'aria-label': 'Fecha de nacimiento',
+  });
+
+  const pie = el('div', {});
+  function dibujarPie() {
+    vaciar(pie);
+    const c = cuandoCumple(campo.value);
+    if (!c) {
+      pie.appendChild(el('em', { class: 'pista-campo' }, [
+        'Para el saludo del club. No toca el handicap, ni los puntos, ni el ranking.',
+      ]));
+      return;
+    }
+    pie.appendChild(el('div', { class: 'nota-cumple' + (c.dias === 0 ? ' hoy' : '') }, [
+      icono('cumple', 18),
+      el('div', {}, [el('b', {}, [c.titulo]), el('span', {}, [c.cuando])]),
+    ]));
+    pie.appendChild(el('div', { style: 'text-align:center;margin-top:8px' }, [
+      el('button', {
+        type: 'button', class: 'link sacar',
+        onclick: () => { campo.value = ''; alCambiar(''); dibujarPie(); },
+      }, ['Sacar la fecha']),
+    ]));
+  }
+
+  campo.addEventListener('change', () => { alCambiar(campo.value); dibujarPie(); });
+
+  caja.appendChild(campo);
+  caja.appendChild(pie);
+  dibujarPie();
+  return caja;
 }
 
 /** '14/3' a partir de '1987-03-14'. El año del jugador no se muestra. */
@@ -1540,6 +1620,17 @@ function cartelDeCumples() {
   const c = estado.cumples;
   if (!c) return el('span');
 
+  // Cuántos del plantel activo no la tienen. Sale de la lista ya cargada y no
+  // del cartel, porque el cartel lo arma el servidor al entrar y la lista se
+  // actualiza en cada guardado.
+  const faltan = (estado.plantel || []).filter((j) => j.activo && !j.fecha_nacimiento).length;
+  const irACargar = faltan
+    ? el('button', {
+      type: 'button', class: 'ir-cumples',
+      onclick: () => { cumples.abierto = true; cumples.fechas = {}; cumples.error = null; render(); },
+    }, ['Cargarlos'])
+    : null;
+
   if (c.hoy.length) {
     const quienes = c.hoy.map((x) => x.apodo);
     return el('div', { class: 'cumple hoy' }, [
@@ -1549,6 +1640,21 @@ function cartelDeCumples() {
         el('span', {}, ['Mandale el saludo al grupo.']),
       ]),
     ]);
+  }
+
+  // Mientras falte gente, el cartel es la puerta para cargarlos. Antes decía
+  // "24 sin cargar" y ahí moría: el dato sin la manera de arreglarlo.
+  if (faltan) {
+    return el('div', { class: 'cumple falta' }, [
+      icono('cumple', 20),
+      el('div', {}, [
+        el('b', {}, ['A ' + faltan + (faltan === 1 ? ' le falta' : ' les falta') + ' el cumpleaños']),
+        el('span', {}, [c.proximo
+          ? 'El próximo que se sabe es el de ' + c.proximo.apodo + ', el ' + c.proximo.dia + '/' + c.proximo.mes
+          : 'Todavía no cargó ninguno.']),
+      ]),
+      irACargar,
+    ].filter(Boolean));
   }
 
   if (!c.proximo) {
@@ -1567,12 +1673,98 @@ function cartelDeCumples() {
     el('div', {}, [
       el('b', {}, ['El próximo cumpleaños es el de ' + p.apodo]),
       el('span', {}, [
-        'El ' + p.dia + '/' + p.mes
-        + (p.dias === 1 ? ', mañana' : ', en ' + p.dias + ' días')
-        + (c.cargados < c.total ? ' · ' + (c.total - c.cargados) + ' sin cargar' : ''),
+        'El ' + p.dia + '/' + p.mes + (p.dias === 1 ? ', mañana' : ', en ' + p.dias + ' días'),
       ]),
     ]),
   ]);
+}
+
+/* ------------------------------------------- cargar los que faltan, de corrido */
+
+const cumples = { abierto: false, fechas: {}, error: null, listo: 0 };
+
+/**
+ * Los que no tienen fecha, uno abajo del otro, con su casillero al lado.
+ *
+ * Es lo que hace que los 24 que faltan se carguen de verdad: abriendo y
+ * cerrando 24 fichas no lo hace nadie.
+ */
+function vistaCumples(raiz) {
+  raiz.appendChild(el('button', {
+    class: 'link', type: 'button',
+    onclick: () => { cumples.abierto = false; cumples.fechas = {}; render(); },
+  }, ['‹ Volver al plantel']));
+
+  raiz.appendChild(titulo('Los cumpleaños que faltan'));
+
+  const faltan = (estado.plantel || []).filter((j) => j.activo && !j.fecha_nacimiento);
+
+  if (!faltan.length) {
+    raiz.appendChild(el('div', { class: 'vacio' }, ['Están todos cargados.']));
+    if (cumples.listo) {
+      raiz.appendChild(aviso('ok', 'Cargaste ' + cumples.listo
+        + (cumples.listo === 1 ? ' cumpleaños.' : ' cumpleaños.')));
+    }
+    return;
+  }
+
+  raiz.appendChild(el('p', { class: 'pista', style: 'margin-top:0' }, [
+    'Los ' + faltan.length + ' que no la tienen. El que dejes vacío queda como está.',
+  ]));
+
+  // El botón se arma antes que la lista porque cada casillero lo retoca: con
+  // un `render()` entero en cada fecha se redibuja la lista bajo los dedos y
+  // se pierde el casillero donde uno estaba escribiendo.
+  const boton = el('button', { class: 'primary', type: 'button', disabled: true }, ['']);
+  function refrescarBoton() {
+    const n = Object.keys(cumples.fechas).length;
+    boton.disabled = !n;
+    boton.textContent = n
+      ? 'Guardar ' + (n === 1 ? 'la que cargaste' : 'las ' + n + ' que cargaste')
+      : 'Cargá alguna fecha';
+  }
+
+  raiz.appendChild(el('div', { class: 'lista tabla', style: 'margin-top:12px' }, faltan.map((j) => {
+    const campo = el('input', {
+      type: 'date', class: 'fecha-chica', max: hoy_(), min: '1920-01-01',
+      value: cumples.fechas[j.id] || '',
+      'aria-label': 'Cumpleaños de ' + j.apodo,
+    });
+    campo.addEventListener('change', () => {
+      if (campo.value) cumples.fechas[j.id] = campo.value;
+      else delete cumples.fechas[j.id];
+      refrescarBoton();
+    });
+    return el('div', { class: 'quien compacto estatico' }, [
+      el('span', { style: 'flex:1;min-width:0' }, [
+        el('b', {}, [j.apodo]), el('span', {}, [j.nombre]),
+      ]),
+      campo,
+    ]);
+  })));
+
+  if (cumples.error) raiz.appendChild(aviso('mal', cumples.error));
+
+  boton.onclick = (e) => conBoton(e.target, async () => {
+    const r = await pedir('/api/jugadores', {
+      method: 'POST',
+      body: JSON.stringify({ accion: 'cumples', fechas: cumples.fechas }),
+    });
+    cumples.listo = (cumples.listo || 0) + r.guardados;
+    cumples.fechas = {};
+    await cargarPlantel();
+    // El cartel de arriba lo arma el servidor al entrar: hay que pedirlo de
+    // nuevo para que diga quién es el próximo con los que se acaban de cargar.
+    const fresca = await pedir('/api/sesion');
+    estado.cumples = fresca.cumples;
+  }, cumples);
+  refrescarBoton();
+  raiz.appendChild(el('div', { class: 'acciones' }, [boton]));
+
+  if (cumples.listo) {
+    raiz.appendChild(aviso('ok', 'Van ' + cumples.listo + ' cargados. Quedan '
+      + faltan.length + ' sin fecha.'));
+  }
 }
 
 const enLista = (xs) => (xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + ' y ' + xs[xs.length - 1]);
@@ -1582,6 +1774,8 @@ async function cargarPlantel() {
 }
 
 function vistaPlantel(raiz) {
+  if (cumples.abierto) return vistaCumples(raiz);
+
   raiz.appendChild(titulo('Plantel'));
   raiz.appendChild(cartelDeCumples());
 
@@ -1673,6 +1867,11 @@ function vistaPlantel(raiz) {
               + (j.fecha_nacimiento ? ' · cumple ' + diaYMes(j.fecha_nacimiento) : ''),
             ]),
           ]),
+          // A quién le falta el cumpleaños, dicho en su renglón: es la forma de
+          // encontrarlos sin abrir las 37 fichas una por una.
+          j.activo && !j.fecha_nacimiento
+            ? el('span', { class: 'falta-cumple' }, ['SIN CUMPLE'])
+            : null,
           // Primero la flecha con lo que le movieron los resultados y después,
           // más grande y a la derecha, el handicap con el que hoy se arman los
           // equipos: ese es el número que importa, el otro explica de dónde sale.
@@ -1738,6 +1937,10 @@ function formularioDeCorreccion(j) {
     c.categoria === 'invitado'
       ? campo('Quién lo invita', selectorDeJugador(c.invitado_por, (id) => { c.invitado_por = id; }))
       : null,
+    // El cumpleaños lo pone cada uno la primera vez que entra, pero esa
+    // pantalla pasa una sola vez y se puede saltear: sin esto, al que la
+    // salteó no se lo puede cargar nadie.
+    campo('Cumpleaños', campoDeCumple(c.fecha_nacimiento, (v) => { c.fecha_nacimiento = v; })),
     // Baja, no borrado: sus prácticas, sus puntos y sus caballos quedan.
     el('label', { class: 'campo tilde' }, [
       el('input', {
